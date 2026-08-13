@@ -1,0 +1,75 @@
+[project]
+name = "nvidia-startup-radar"
+version = "0.1.0"
+description = "Plataforma multi-agente para mapear startups brasileiras AI-native e recomendar tecnologias NVIDIA"
+requires-python = ">=3.12"
+
+dependencies = [
+    # Orquestração de agentes
+    "langgraph>=0.2.60",
+    "langgraph-checkpoint-postgres>=2.0.0",
+    "langchain-core>=0.3.28",
+    "langchain-nvidia-ai-endpoints>=0.3.7",
+    # Contratos e configuração
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.7.0",
+    # Persistência
+    "sqlalchemy>=2.0.36",
+    "alembic>=1.14.0",
+    "psycopg[binary]>=3.2.3",
+    # RAG
+    "qdrant-client>=1.12.1",
+    "rank-bm25>=0.2.2",
+    "cohere>=5.13.0",
+    # Scraping
+    "httpx>=0.28.0",
+    "trafilatura>=2.0.0",
+    "beautifulsoup4>=4.12.3",
+    "playwright>=1.49.0",
+    "tavily-python>=0.5.0",
+    # API
+    "fastapi>=0.115.6",
+    "uvicorn[standard]>=0.34.0",
+    "sse-starlette>=2.2.1",
+    # Observabilidade
+    "langfuse>=2.57.0",
+    # Utilidades
+    "pyyaml>=6.0.2",
+    "tenacity>=9.0.0",
+    "structlog>=24.4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.4",
+    "pytest-asyncio>=0.25.0",
+    "ruff>=0.8.4",
+    "mypy>=1.14.0",
+]
+eval = [
+    "ragas>=0.2.9",
+    "datasets>=3.2.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/radar"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+asyncio_mode = "auto"
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+ignore_missing_imports = true

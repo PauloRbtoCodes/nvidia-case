@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Ambiente
+.env
+.env.local
+
+# Contexto de trabalho local (não versionar)
+.claude/
+CLAUDE.md
+
+# Dados coletados e caches (não versionar scraping bruto)
+data/cache/
+data/raw/
+data/bm25_index/
+*.db
+*.sqlite3
+
+# Node / Next.js
+node_modules/
+web/.next/
+web/out/
+web/.turbo/
+
+# Artefatos
+*.pdf
+!docs/**/*.pdf
+.DS_Store
+
+# Playwright
+playwright-report/
+test-results/

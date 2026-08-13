@@ -1,0 +1,138 @@
+# ---------------------------------------------------------------------------
+# Fontes da base de conhecimento NVIDIA (seção 8 do enunciado).
+#
+# `category` alimenta o payload index do Qdrant: permite filtrar antes da busca
+# vetorial (ex.: gap de latência → só documentos de `inferencia`).
+# ---------------------------------------------------------------------------
+version: "0.1.0"
+
+conceitual:
+  - url: https://sequoiacap.com/article/services-the-new-software/
+    title: "Sequoia — Services: The New Software"
+    category: ai_native_services
+  - url: https://www.emcap.com/thoughts/the-ai-native-services-playbook
+    title: "Emergence Capital — The AI-Native Services Playbook"
+    category: ai_native_services
+  - url: https://blogs.nvidia.com/blog/ai-5-layer-cake/
+    title: "NVIDIA — AI 5-Layer Cake"
+    category: arquitetura_ia
+
+programa:
+  - url: https://www.nvidia.com/en-us/startups/
+    title: "NVIDIA Inception"
+    category: inception
+    technology: "NVIDIA Inception"
+
+inferencia:
+  - url: https://www.nvidia.com/en-us/ai-data-science/products/nim-microservices/
+    title: "NVIDIA NIM — Microservices"
+    category: inferencia
+    technology: "NIM"
+  - url: https://build.nvidia.com/
+    title: "NVIDIA API Catalog"
+    category: inferencia
+    technology: "NIM"
+  - url: https://developer.nvidia.com/triton-inference-server
+    title: "NVIDIA Triton Inference Server"
+    category: inferencia
+    technology: "Triton Inference Server"
+  - url: https://docs.nvidia.com/deeplearning/triton-inference-server/user-guide/docs/
+    title: "Triton — Documentação"
+    category: inferencia
+    technology: "Triton Inference Server"
+  - url: https://github.com/NVIDIA/TensorRT-LLM
+    title: "TensorRT-LLM"
+    category: inferencia
+    technology: "TensorRT-LLM"
+
+modelos:
+  - url: https://www.nvidia.com/en-us/ai-data-science/products/nemo/
+    title: "NVIDIA NeMo"
+    category: customizacao_modelos
+    technology: "NeMo"
+  - url: https://github.com/NVIDIA/NeMo-Guardrails
+    title: "NeMo Guardrails"
+    category: governanca
+    technology: "NeMo Guardrails"
+
+dados:
+  - url: https://rapids.ai/
+    title: "NVIDIA RAPIDS"
+    category: pipeline_dados
+    technology: "RAPIDS"
+  - url: https://docs.rapids.ai/api/cudf/stable/
+    title: "cuDF — Documentação"
+    category: pipeline_dados
+    technology: "cuDF"
+  - url: https://docs.rapids.ai/api/cuml/stable/
+    title: "cuML — Documentação"
+    category: pipeline_dados
+    technology: "cuML"
+  - url: https://developer.nvidia.com/cuda-toolkit
+    title: "CUDA Toolkit"
+    category: computacao_gpu
+    technology: "CUDA"
+
+verticais:
+  - url: https://developer.nvidia.com/riva
+    title: "NVIDIA Riva — ASR/TTS"
+    category: voz
+    technology: "Riva"
+  - url: https://www.nvidia.com/en-us/omniverse/
+    title: "NVIDIA Omniverse"
+    category: simulacao_3d
+    technology: "Omniverse"
+  - url: https://developer.nvidia.com/isaac
+    title: "NVIDIA Isaac — Robotics"
+    category: robotica
+    technology: "Isaac"
+  - url: https://www.nvidia.com/en-us/clara/
+    title: "NVIDIA Clara — Healthcare"
+    category: saude
+    technology: "Clara"
+  - url: https://developer.nvidia.com/morpheus-cybersecurity
+    title: "NVIDIA Morpheus — Cybersecurity"
+    category: seguranca
+    technology: "Morpheus"
+
+plataforma:
+  - url: https://www.nvidia.com/en-us/data-center/products/ai-enterprise/
+    title: "NVIDIA AI Enterprise"
+    category: plataforma_empresarial
+    technology: "NVIDIA AI Enterprise"
+
+# ---------------------------------------------------------------------------
+# Vídeos: a transcrição entra na KB. Cobrem benefícios do Inception e a visão
+# de comunidade, que a documentação de produto não cobre.
+# ---------------------------------------------------------------------------
+video:
+  - url: https://youtube.com/playlist?list=PLBaUJRFQ-j_WJZdZfFNsgUWDWF1Ldjp_X
+    title: "Playlist — Tecnologias NVIDIA"
+    category: visao_geral
+  - url: https://youtu.be/NmZDQSdUVUQ
+    title: "Comunidade de startups NVIDIA"
+    category: inception
+    technology: "NVIDIA Inception"
+  - url: https://www.youtube.com/live/fWfkE6cibwQ
+    title: "Benefícios do Inception"
+    category: inception
+    technology: "NVIDIA Inception"
+
+# ---------------------------------------------------------------------------
+# ENRIQUECIMENTO MANUAL — a peça que faz o motor de recomendação funcionar.
+#
+# A documentação oficial explica O QUE cada tecnologia faz, mas nunca QUANDO
+# recomendá-la. Sem estes cards, o RAG responde "o que é o Triton" e falha em
+# "qual tecnologia serve para esta startup". São escritos à mão em
+# data/nvidia_cards/*.md e ingeridos junto com as URLs acima.
+# ---------------------------------------------------------------------------
+cards_manuais:
+  path: data/nvidia_cards/
+  schema:
+    - technology
+    - problema_que_resolve
+    - sinais_de_que_a_startup_precisa    # observáveis pelo scraper
+    - pre_requisitos
+    - complexidade                        # baixa | media | alta
+    - eixo_defensibilidade                # qual gap do score isto endereça
+    - primeira_acao_sugerida

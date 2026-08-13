@@ -1,0 +1,140 @@
+# ---------------------------------------------------------------------------
+# Pesos e premissas do Defensibility Radar.
+#
+# Versionado de propósito: o score guardado no Postgres grava qual versão usou,
+# então recalibrar os pesos não exige re-scraping e não corrompe o histórico.
+#
+# Os valores iniciais são hipóteses. A calibração acontece na semana 4, contra
+# as ~50 startups rotuladas manualmente em data/golden/startup_labels.yaml.
+# ---------------------------------------------------------------------------
+version: "0.1.0-inicial"
+
+axis_weights:
+  proprietary_data: 0.30
+  workflow_depth: 0.25
+  stack_ownership: 0.25
+  distribution: 0.20
+
+# Confiança mínima para um eixo sustentar recomendação. Abaixo disso a UI
+# mostra "evidência insuficiente" em vez de nota baixa.
+actionable_confidence_threshold: 0.35
+
+# Abaixo deste score o eixo é considerado gap.
+gap_score_threshold: 60.0
+
+# ---------------------------------------------------------------------------
+# Sinais por eixo. O Scorer usa isto como rubrica no prompt e como checagem
+# determinística — o LLM pontua, mas dentro de uma escala explícita e auditável.
+# ---------------------------------------------------------------------------
+signals:
+  proprietary_data:
+    positive:
+      - "dataset próprio construído ao longo do tempo"
+      - "integração que gera dado de uso do cliente"
+      - "dado regulado ou de difícil acesso (saúde, jurídico, financeiro)"
+      - "loop de feedback rotulado por usuários"
+      - "vaga aberta de data engineer ou de curadoria de dados"
+    negative:
+      - "opera apenas sobre dado que o usuário cola no prompt"
+      - "conteúdo público como única fonte"
+
+  workflow_depth:
+    positive:
+      - "integrações nomeadas com sistemas do cliente (ERP, PDV, EMR, CRM)"
+      - "escreve no sistema do cliente, não apenas sugere"
+      - "certificação ou conformidade regulatória"
+      - "SLA contratual e suporte dedicado"
+      - "human-in-the-loop como parte do produto"
+    negative:
+      - "interface de chat como produto inteiro"
+      - "caso de uso genérico atendido nativamente pelos labs"
+
+  stack_ownership:
+    positive:
+      - "modelo fine-tunado ou treinado internamente"
+      - "inferência auto-hospedada"
+      - "menção pública a otimização de latência ou custo de inferência"
+      - "vaga de ML engineer, MLOps ou engenharia de infraestrutura"
+      - "avaliação e observabilidade próprias de modelos"
+    negative:
+      - "'powered by GPT-4' como selo no rodapé"
+      - "um único provedor de API sem camada de abstração"
+
+  distribution:
+    positive:
+      - "logos de clientes enterprise divulgados"
+      - "presença em marketplace ou parceria de canal"
+      - "contrato público ou licitação"
+      - "comunidade ativa própria"
+    negative:
+      - "sem cliente identificável publicamente"
+      - "dependência de um único canal pago"
+
+# ---------------------------------------------------------------------------
+# Capacidade de agir — entra na fila de prioridade.
+# urgencia = risco_comoditizacao * capacity_to_act
+# ---------------------------------------------------------------------------
+capacity_to_act:
+  funding_recency_months: 18   # rodada mais antiga que isto deixa de contar como capital fresco
+  weights:
+    recent_funding: 0.40
+    technical_founder: 0.25
+    engineering_hiring: 0.20
+    stage_maturity: 0.15
+  stage_scores:
+    pre_seed: 0.30
+    seed: 0.70
+    serie_a: 1.00
+    serie_b_plus: 0.85   # já tem stack decidida; janela de influência menor
+    bootstrapped: 0.40
+    desconhecido: 0.30
+
+# ---------------------------------------------------------------------------
+# Premissas do TCO. TODAS aparecem no relatório junto do número.
+# Preços em USD, atualizados manualmente — a data importa e vai no briefing.
+# ---------------------------------------------------------------------------
+tco:
+  precos_atualizados_em: "2026-08-13"
+
+  # Custo médio ponderado por 1M tokens (mix ~3:1 entrada:saída).
+  api_pricing_usd_per_1m_tokens:
+    openai_gpt_frontier: 6.00
+    openai_gpt_mini: 0.45
+    anthropic_claude_frontier: 9.00
+    google_gemini_pro: 3.50
+    desconhecido: 5.00
+
+  # GPU sob demanda em nuvem. Reservado/anual reduz bastante — citar no briefing.
+  gpu_hourly_usd:
+    l40s: 1.10
+    a100_80gb: 2.20
+    h100: 3.50
+
+  # Throughput de referência para modelo ~8B quantizado com TensorRT-LLM,
+  # em lote. Ordem de grandeza para estimativa, não benchmark medido.
+  throughput_tokens_per_second:
+    l40s: 2800
+    a100_80gb: 5200
+    h100: 9000
+
+  utilizacao_media: 0.35   # GPU dedicada raramente passa disso em produção real
+
+  cenarios_volume_multiplicador:
+    conservador: 0.5
+    medio: 1.0
+    agressivo: 2.5
+
+  # Volume mensal base de tokens por categoria de produto, para uma startup
+  # com tração inicial. Multiplicado pelo cenário e ajustado por headcount.
+  volume_base_tokens_mes:
+    atendimento_cliente: 250_000_000
+    copiloto_vertical: 80_000_000
+    analise_documentos: 120_000_000
+    busca_interna: 40_000_000
+    voz_transcricao: 300_000_000
+    geracao_conteudo: 60_000_000
+    desconhecido: 50_000_000
+
+  # Abaixo deste volume, migrar para GPU dedicada não compensa. Dizer isso
+  # explicitamente vale mais que forçar uma recomendação.
+  break_even_minimo_tokens_mes: 30_000_000
