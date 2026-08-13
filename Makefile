@@ -1,4 +1,4 @@
-.PHONY: help setup up down logs check ingest run api web test lint eval clean
+.PHONY: help setup up down logs migrate check ingest run api web test lint eval clean
 
 help:
 	@echo "NVIDIA Startup AI Radar"
@@ -6,6 +6,7 @@ help:
 	@echo "  make setup    Instala dependencias Python (uv)"
 	@echo "  make up       Sobe Postgres, Qdrant e Langfuse"
 	@echo "  make down     Derruba os servicos"
+	@echo "  make migrate  Aplica as migrations do Postgres"
 	@echo "  make check    Valida .env e conectividade com a infra"
 	@echo "  make ingest   Ingere a base de conhecimento NVIDIA no Qdrant"
 	@echo "  make run      Executa o grafo via CLI"
@@ -28,6 +29,9 @@ down:
 
 logs:
 	docker compose logs -f
+
+migrate:
+	uv run alembic upgrade head
 
 check:
 	uv run python -m radar.cli check

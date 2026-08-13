@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     nvidia_api_key: str = Field(default="")
     nim_base_url: str = "https://integrate.api.nvidia.com/v1"
     nim_chat_model: str = "meta/llama-3.3-70b-instruct"
+    nim_fast_model: str = "meta/llama-3.1-8b-instruct"
+    """Modelo pequeno para tarefas onde o erro é barato e detectável adiante
+    (search planner, evidence validator). A quota gratuita do NIM é limitada, e
+    gastar o modelo grande em planejamento de query desperdiça o orçamento das
+    tarefas que realmente precisam de raciocínio."""
+
     nim_embed_model: str = "nvidia/nv-embedqa-e5-v5"
 
     # Reranking e busca

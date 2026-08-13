@@ -10,15 +10,13 @@ decisão em um lugar só e auditável.
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from enum import StrEnum
 
 from radar.config import Settings, get_settings
 
-#: Modelo pequeno padrão. Vive aqui e não em `config.py` porque `models/` e
-#: `config.py` estão congelados nesta frente de trabalho; a variável de ambiente
-#: `NIM_FAST_MODEL` permite trocar sem editar código.
+#: Fallback do modelo pequeno. A fonte real é `Settings.nim_fast_model`
+#: (variável `NIM_FAST_MODEL`); este valor só entra se a configuração vier vazia.
 DEFAULT_FAST_MODEL = "meta/llama-3.1-8b-instruct"
 
 
@@ -95,7 +93,7 @@ class ModelRegistry:
     ) -> ModelRegistry:
         settings = settings or get_settings()
         return cls(
-            fast_model=os.environ.get("NIM_FAST_MODEL") or DEFAULT_FAST_MODEL,
+            fast_model=settings.nim_fast_model or DEFAULT_FAST_MODEL,
             reasoning_model=settings.nim_chat_model,
             task_overrides=dict(task_overrides or {}),
         )
