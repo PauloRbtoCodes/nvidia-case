@@ -57,7 +57,9 @@ class Recommendation(BaseModel):
 
     priority: Priority
     complexity: Complexity
-    next_action: str = Field(description="Ação concreta para o time NVIDIA — não 'agendar reunião'.")
+    next_action: str = Field(
+        description="Ação concreta para o time NVIDIA — não 'agendar reunião'."
+    )
 
     kb_citations: list[RetrievedChunk] = Field(
         default_factory=list, description="Trechos da KB NVIDIA que fundamentam a recomendação."
@@ -109,9 +111,9 @@ class Briefing(BaseModel):
     )
     caveats: list[str] = Field(
         default_factory=list,
-        description="Limites do diagnóstico: lacunas de evidência, premissas do TCO, dados antigos. "
-        "Vai no relatório, não em nota de rodapé — quem vai à reunião precisa saber "
-        "o que o sistema não sabe.",
+        description="Limites do diagnóstico: lacunas de evidência, premissas do TCO, dados "
+        "antigos. Vai no relatório, não em nota de rodapé — quem vai à reunião precisa "
+        "saber o que o sistema não sabe.",
     )
 
     markdown: str | None = None

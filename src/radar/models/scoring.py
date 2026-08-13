@@ -47,9 +47,25 @@ AXIS_WEIGHTS: dict[DefensibilityAxis, float] = {
 #: Serve de gate determinístico antes do RAG: filtra o universo de candidatas
 #: para que o LLM só justifique dentro de um conjunto já pertinente.
 AXIS_TO_NVIDIA_FAMILY: dict[DefensibilityAxis, list[str]] = {
-    DefensibilityAxis.PROPRIETARY_DATA: ["NeMo Curator", "NeMo Customizer", "RAPIDS", "cuDF", "cuML"],
-    DefensibilityAxis.WORKFLOW_DEPTH: ["NIM", "NeMo Guardrails", "NIM Agent Blueprints", "Riva"],
-    DefensibilityAxis.STACK_OWNERSHIP: ["NIM", "TensorRT-LLM", "Triton Inference Server", "NVIDIA AI Enterprise"],
+    DefensibilityAxis.PROPRIETARY_DATA: [
+        "NeMo Curator",
+        "NeMo Customizer",
+        "RAPIDS",
+        "cuDF",
+        "cuML",
+    ],
+    DefensibilityAxis.WORKFLOW_DEPTH: [
+        "NIM",
+        "NeMo Guardrails",
+        "NIM Agent Blueprints",
+        "Riva",
+    ],
+    DefensibilityAxis.STACK_OWNERSHIP: [
+        "NIM",
+        "TensorRT-LLM",
+        "Triton Inference Server",
+        "NVIDIA AI Enterprise",
+    ],
     DefensibilityAxis.DISTRIBUTION: ["NVIDIA Inception"],
 }
 
@@ -58,7 +74,9 @@ class AxisScore(BaseModel):
     """Pontuação de um eixo, com evidência e confiança independentes."""
 
     axis: DefensibilityAxis
-    score: float = Field(ge=0.0, le=100.0, description="0 = totalmente comoditizável, 100 = defensável.")
+    score: float = Field(
+        ge=0.0, le=100.0, description="0 = totalmente comoditizável, 100 = defensável."
+    )
     confidence: float = Field(
         ge=0.0, le=1.0, description="Quanta evidência sustenta o score. NÃO é o score."
     )
