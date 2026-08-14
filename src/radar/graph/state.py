@@ -61,6 +61,15 @@ class CompanyState(TypedDict, total=False):
     # Coleta e extração
     raw_pages: Annotated[list[dict], operator.add]
     evidences: Annotated[list[Evidence], operator.add]
+
+    job_titles: list[str]
+    """Vagas técnicas lidas do HTML pelo Scraper, antes de qualquer LLM.
+
+    Fica fora do perfil porque o Extractor ainda não rodou quando são coletadas.
+    Sem reducer de propósito: o nó de coleta funde a lista nova com a antiga, e
+    `operator.add` acumularia o mesmo título a cada re-coleta.
+    """
+
     profile: CompanyProfile | None
 
     # Diagnóstico
@@ -68,6 +77,18 @@ class CompanyState(TypedDict, total=False):
     validation_notes: list[str]
     refetch_queries: list[str]
     """Queries que o Evidence Validator pediu para preencher lacunas."""
+
+    grounding_ratio: float | None
+    """Fração dos campos auditados com veredito `supported`. Vai para os caveats."""
+
+    requires_recollection: bool
+    """Decisão do validador já resolvida contra o orçamento de retry.
+
+    A aresta condicional só lê este booleano em vez de refazer a conta: a regra
+    de parada mora num lugar só (`nodes.validator.precisa_recoletar`), senão o
+    teto de tentativas passa a existir em duas versões que divergem na primeira
+    manutenção.
+    """
 
     defensibility: DefensibilityScore | None
     priority: PriorityAssessment | None
@@ -105,6 +126,16 @@ class RadarState(TypedDict, total=False):
 
     # Saída consolidada
     briefings: Annotated[list[Briefing], operator.add]
+
+    queue: list[str]
+    """Nomes das empresas em ordem decrescente de urgência — a fila de trabalho.
+
+    Índice sobre `briefings`, não cópia: aquela chave usa `operator.add` para
+    receber o fan-out, então reescrevê-la ordenada a concatenaria consigo mesma.
+    Guardar a ordem separada da lista custa uma linha e evita duplicar cada
+    briefing no checkpoint.
+    """
+
     skipped: Annotated[list[dict], operator.add]
     """Empresas descartadas cedo (non_ai) com o motivo — economiza RAG e explica a lacuna."""
 

@@ -13,6 +13,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
+from radar.models.recommendation import Recommendation
 from radar.models.scoring import AxisScore, DefensibilityScore, TCOEstimate
 
 
@@ -126,3 +127,37 @@ class AxisScoreSet(BaseModel):
             tco=list(tco or []),
             weights_version=weights_version,
         )
+
+
+class RecommendationSet(BaseModel):
+    """Saída do Recommender: a lista, para o modelo poder devolver um objeto só.
+
+    `Recommendation` já levanta erro sem `kb_citations`, então uma recomendação
+    infundada nem chega a ser construída — o retry de validação do `NIMClient`
+    devolve o erro ao modelo com o campo exato. O nó ainda reconcilia cada
+    citação contra os chunks realmente recuperados: o modelo é capaz de copiar o
+    trecho *quase* certo, e "quase" não é citação.
+    """
+
+    company_name: str
+    recommendations: list[Recommendation] = Field(default_factory=list)
+
+
+class BriefingDraft(BaseModel):
+    """Saída do Briefing Agent: apenas a prosa.
+
+    Mesma lógica do `AxisScoreSet`. Score, TCO, prioridade e recomendações já
+    existem como objetos validados; pedir que o modelo os reescreva no briefing
+    só criaria oportunidade de divergirem do que está no banco. O nó monta o
+    `Briefing` final com os objetos originais e este texto por cima.
+    """
+
+    executive_summary: str = Field(min_length=80)
+    moat_plan: str = Field(min_length=80)
+    conversation_starters: list[str] = Field(default_factory=list)
+    inception_fit: str | None = None
+    caveats: list[str] = Field(
+        min_length=1,
+        description="Nunca vazio: um briefing que esconde seus limites falha na primeira "
+        "pergunta difícil do founder.",
+    )
