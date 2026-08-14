@@ -475,6 +475,60 @@ def extract_career_links(html: str, base_url: str) -> list[str]:
     return links
 
 
+def extract_signal_links(html: str, base_url: str, *, same_domain_only: bool = False) -> list[str]:
+    """Links internos que costumam carregar sinal técnico: blog, preços, clientes.
+
+    A home institucional é a página que menos diz sobre stack — ela é escrita
+    para investidor e comprador. O sinal mora um clique adiante: o post de
+    engenharia (a fonte de maior confiança em `SOURCE_TRUST`), a página de preços
+    (que revela modelo de cobrança e, com ele, o volume de inferência) e a de
+    clientes (que sustenta o eixo de distribuição).
+
+    Carreira sai por `extract_career_links`, que é caso à parte: precisa seguir
+    para ATS de terceiros (Gupy, Lever), e aqui filtramos justamente o que sai do
+    domínio quando `same_domain_only` está ligado.
+    """
+    interesse: tuple[str, ...] = (
+        *BLOG_PATH_HINTS,
+        "/precos",
+        "/preco",
+        "/pricing",
+        "/planos",
+        "/plans",
+        "/clientes",
+        "/customers",
+        "/cases",
+        "/casos",
+        *DOCS_HINTS,
+    )
+    origem = urlsplit(base_url).netloc.casefold().removeprefix("www.")
+
+    links: list[str] = []
+    seen: set[str] = set()
+    for anchor in _soup(html).find_all("a", href=True):
+        href = anchor["href"].strip()
+        if not href or href.startswith(("#", "mailto:", "tel:", "javascript:")):
+            continue
+        absolute = urljoin(base_url, href)
+        partes = urlsplit(absolute.casefold())
+        if partes.scheme not in ("http", "https"):
+            continue
+        host = partes.netloc.removeprefix("www.")
+        if same_domain_only and host != origem:
+            continue
+        # Casamos no caminho, não na URL inteira: "blog" no domínio de um
+        # agregador (`medium.com/@empresa`) não é o blog de engenharia dela.
+        if not any(hint in partes.path for hint in interesse) and not host.startswith("blog."):
+            continue
+        normalized = absolute.rstrip("/")
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        links.append(absolute)
+
+    return links
+
+
 def extract_job_titles(html: str) -> list[str]:
     """Títulos de vagas técnicas visíveis na página.
 
