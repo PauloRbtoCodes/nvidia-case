@@ -222,52 +222,6 @@ def cmd_ingest(args: argparse.Namespace) -> int:
 # --------------------------------------------------------------------------- #
 # run
 # --------------------------------------------------------------------------- #
-def _persistir(resultados: Sequence[dict[str, Any]]) -> tuple[int, str | None]:
-    """Grava o lote no Postgres. Devolve quantas empresas entraram e o erro, se houver.
-
-    Cada empresa entra na sua própria transação: um perfil que viole uma
-    constraint não pode levar junto as outras onze que estavam corretas.
-    """
-    from radar.persistence.db import healthcheck, session_scope
-    from radar.persistence.repositories import (
-        BriefingRepository,
-        ClassificationRepository,
-        CompanyRepository,
-        EvidenceRepository,
-        ScoreRepository,
-        collect_evidences,
-    )
-
-    if not healthcheck():
-        return 0, "banco inacessível"
-
-    gravadas = 0
-    for estado in resultados:
-        profile = estado.get("profile")
-        if profile is None:
-            continue
-        try:
-            with session_scope() as sessao:
-                empresa = CompanyRepository.upsert(sessao, profile)
-                EvidenceRepository.bulk_upsert(sessao, empresa.id, collect_evidences(profile))
-
-                classificacao = estado.get("classification")
-                if classificacao is not None:
-                    ClassificationRepository.add(sessao, empresa.id, classificacao)
-
-                briefing = estado.get("briefing")
-                score = estado.get("defensibility")
-                if briefing is not None:
-                    BriefingRepository.save(sessao, empresa.id, briefing)
-                elif score is not None:
-                    ScoreRepository.add(sessao, empresa.id, score, estado.get("priority"))
-            gravadas += 1
-        except Exception as exc:  # noqa: BLE001 - uma empresa não derruba o lote
-            _linha(AVISO, f"não persistida: {profile.name}", str(exc)[:160])
-
-    return gravadas, None
-
-
 def _gravar_markdown(briefings: Sequence[Any], destino: Path) -> list[Path]:
     destino.mkdir(parents=True, exist_ok=True)
     carimbo = datetime.now(UTC).strftime("%Y%m%d")
@@ -355,11 +309,19 @@ def cmd_run(args: argparse.Namespace) -> int:
         print(f"estado completo em {args.json}")
 
     if not args.no_persist:
-        gravadas, erro = _persistir(estado.get("company_results") or [])
-        if erro:
-            _linha(AVISO, "persistência", f"{erro} — os markdowns acima seguem válidos")
+        from radar.persistence.sink import persist_batch
+
+        relatorio = persist_batch(estado.get("company_results") or [])
+        if relatorio.unavailable:
+            _linha(
+                AVISO,
+                "persistência",
+                f"{relatorio.unavailable} — os markdowns acima seguem válidos",
+            )
         else:
-            _linha(OK, "persistência", f"{gravadas} empresa(s) no Postgres")
+            _linha(OK, "persistência", f"{len(relatorio.saved)} empresa(s) no Postgres")
+        for nome, erro in relatorio.errors:
+            _linha(AVISO, f"não persistida: {nome}", erro)
 
     return 0 if briefings else 1
 
