@@ -179,12 +179,18 @@ def _parse_front_matter(text: str) -> tuple[dict[str, Any], str]:
     return (meta if isinstance(meta, dict) else {}), parts[2].lstrip("\n")
 
 
-def load_cards(directory: Path | str = DEFAULT_CARDS_DIR) -> list[RawDocument]:
-    """Lê os cards manuais. Diretório ausente devolve lista vazia, sem erro.
+def _e_arquivo_meta(card_path: Path) -> bool:
+    """Guia de escrita e rascunho não são conteúdo da KB.
 
-    Os cards ainda não foram escritos; o pipeline precisa rodar antes deles para
-    que a KB oficial já esteja indexada e testável.
+    Sem esta exclusão, o README do diretório vira chunk indexado e concorre na
+    busca com os cards de verdade — respondendo "como escrever um card" a uma
+    pergunta sobre qual tecnologia recomendar.
     """
+    return card_path.stem.upper() == "README" or card_path.stem.startswith("_")
+
+
+def load_cards(directory: Path | str = DEFAULT_CARDS_DIR) -> list[RawDocument]:
+    """Lê os cards manuais. Diretório ausente devolve lista vazia, sem erro."""
     path = Path(directory)
     if not path.is_dir():
         log.info("cards_manuais_ausentes", caminho=str(path))
@@ -192,6 +198,8 @@ def load_cards(directory: Path | str = DEFAULT_CARDS_DIR) -> list[RawDocument]:
 
     documents: list[RawDocument] = []
     for card_path in sorted(path.glob("*.md")):
+        if _e_arquivo_meta(card_path):
+            continue
         raw = card_path.read_text(encoding="utf-8")
         meta, body = _parse_front_matter(raw)
         if not body.strip():

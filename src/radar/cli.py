@@ -140,16 +140,36 @@ def cmd_check(args: argparse.Namespace) -> int:
 
     # Cards manuais: sem eles o RAG responde "o que é o Triton" e falha em
     # "qual tecnologia para esta startup". É a armadilha documentada no CLAUDE.md.
-    cards = PROJECT_ROOT / "data" / "nvidia_cards"
-    quantos = len(list(cards.glob("*.md"))) if cards.exists() else 0
-    if quantos:
-        _linha(OK, "cards de recomendação", f"{quantos} cards")
-    else:
-        _linha(
-            AVISO,
-            "cards de recomendação",
-            "data/nvidia_cards/ vazio — o RAG explica o produto, não indica quando usá-lo",
+    #
+    # Contamos por `load_cards` e não por `glob`: o que interessa é quantos serão
+    # de fato ingeridos — o guia de escrita do diretório não conta.
+    try:
+        from radar.models.scoring import AXIS_TO_NVIDIA_FAMILY
+        from radar.rag.ingest import load_cards
+
+        cards = load_cards()
+        cobertas = {c.source.technology for c in cards}
+        descobertas = sorted(
+            {t for familia in AXIS_TO_NVIDIA_FAMILY.values() for t in familia} - cobertas
         )
+        if not cards:
+            _linha(
+                AVISO,
+                "cards de recomendação",
+                "data/nvidia_cards/ vazio — o RAG explica o produto, não indica quando usá-lo",
+            )
+        elif descobertas:
+            # Gate libera a tecnologia, busca não tem o que devolver, guardrail
+            # bloqueia — e nada na execução explica a causa.
+            _linha(
+                AVISO,
+                "cards de recomendação",
+                f"{len(cards)} cards, mas sem card para: {', '.join(descobertas)}",
+            )
+        else:
+            _linha(OK, "cards de recomendação", f"{len(cards)} cards, todo o gate coberto")
+    except Exception as exc:  # noqa: BLE001
+        _linha(AVISO, "cards de recomendação", str(exc)[:160])
 
     print()
     if bloqueantes:
