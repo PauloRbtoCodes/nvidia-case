@@ -51,6 +51,14 @@ class CapacityConfig(BaseModel):
     stage_scores: dict[str, float]
 
 
+class PriorityConfig(BaseModel):
+    """Cortes que traduzem score e capacidade no balde da semana."""
+
+    min_global_confidence: float = Field(ge=0.0, le=1.0)
+    defensible_threshold: float = Field(ge=0.0, le=100.0)
+    capacity_threshold: float = Field(ge=0.0, le=1.0)
+
+
 class TCOConfig(BaseModel):
     precos_atualizados_em: str
     api_pricing_usd_per_1m_tokens: dict[str, float]
@@ -77,6 +85,7 @@ class ScoringWeights(BaseModel):
     axis_weights: dict[str, float]
     actionable_confidence_threshold: float = Field(ge=0.0, le=1.0)
     gap_score_threshold: float = Field(ge=0.0, le=100.0)
+    priority: PriorityConfig
     signals: dict[str, AxisSignals]
     capacity_to_act: CapacityConfig
     tco: TCOConfig

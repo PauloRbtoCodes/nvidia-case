@@ -22,16 +22,13 @@ from radar.models.scoring import (
     PriorityAssessment,
     PriorityBucket,
 )
-from radar.scoring.weights import ScoringWeights, get_weights
+from radar.scoring.weights import PriorityConfig, ScoringWeights, get_weights
 
-#: Confiança global abaixo da qual não decidimos nada sobre a empresa: o score
-#: existe, mas repousa em evidência fina demais para mandar alguém à reunião.
-#: É o mesmo princípio do `is_actionable` por eixo, aplicado ao conjunto.
-MIN_GLOBAL_CONFIDENCE = 0.35
-
-#: Acima deste score a empresa já é defensável: deixa de ser alvo de resgate
-#: técnico e vira candidata a case de sucesso do Inception.
-DEFENSIBLE_THRESHOLD = 65.0
+# Os três cortes desta fila vivem em `scoring/weights.yaml`, seção `priority`.
+# Estavam hardcoded aqui, o que os mantinha fora de `weights_version` — e são
+# exatamente os números que a calibração contra as ~50 startups rotuladas quer
+# ajustar. Recalibrar tinha que ser mudança de código, e o histórico ficava
+# incomparável sem nada registrando por quê.
 
 
 def _meses_desde(quando: date, *, hoje: date | None = None) -> float:
@@ -116,24 +113,26 @@ def _bucket(
     score: DefensibilityScore,
     capacidade: float,
     maturity: AIMaturity | None,
+    cortes: PriorityConfig,
 ) -> tuple[PriorityBucket, str]:
     """Traduz risco × capacidade na ação da semana."""
-    if maturity is AIMaturity.INDETERMINADO or score.global_confidence < MIN_GLOBAL_CONFIDENCE:
+    sem_confianca = score.global_confidence < cortes.min_global_confidence
+    if maturity is AIMaturity.INDETERMINADO or sem_confianca:
         return (
             PriorityBucket.MONITORAR,
             "Re-coletar evidência antes de gastar tempo humano: a confiança global do "
             f"score é {score.global_confidence:.2f}, abaixo do mínimo de "
-            f"{MIN_GLOBAL_CONFIDENCE:.2f} para sustentar uma conversa.",
+            f"{cortes.min_global_confidence:.2f} para sustentar uma conversa.",
         )
 
-    if score.total >= DEFENSIBLE_THRESHOLD:
+    if score.total >= cortes.defensible_threshold:
         return (
             PriorityBucket.CASE_POTENCIAL,
             "Convidar para case de referência e avaliar co-marketing: a empresa já mostra "
             f"fosso (score {score.total:.0f}) e a conversa técnica é entre pares.",
         )
 
-    if capacidade >= 0.5:
+    if capacidade >= cortes.capacity_threshold:
         return (
             PriorityBucket.ABORDAR_AGORA,
             "Agendar conversa técnica nas próximas duas semanas: há gap real de "
@@ -164,8 +163,9 @@ def avaliar_prioridade(
     empresas que ninguém consegue mover, que é exatamente o modo de falha de toda
     lista de leads que o gerente já ignora hoje.
     """
-    capacidade, detalhe = capacity_to_act(profile, weights=weights, hoje=hoje)
-    bucket, proximo_passo = _bucket(score, capacidade, maturity)
+    w = weights or get_weights()
+    capacidade, detalhe = capacity_to_act(profile, weights=w, hoje=hoje)
+    bucket, proximo_passo = _bucket(score, capacidade, maturity, w.priority)
 
     # Ponderamos a urgência pela confiança global: um risco medido sobre evidência
     # fina não pode furar a fila de um risco medido sobre evidência sólida.

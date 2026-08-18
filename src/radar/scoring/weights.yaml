@@ -71,6 +71,26 @@ signals:
       - "dependência de um único canal pago"
 
 # ---------------------------------------------------------------------------
+# Cortes da fila de prioridade. Estavam hardcoded em scoring/priority.py, o que
+# violava a regra do projeto ("premissas numéricas vivem aqui, versionadas") e,
+# pior, os deixava de fora de `weights_version`: a calibração da semana 4 quer
+# mexer exatamente nestes cortes, e sem eles aqui isso exigiria mudar código e
+# produziria histórico incomparável sem nada registrando a diferença.
+# ---------------------------------------------------------------------------
+priority:
+  # Abaixo disto o score existe mas repousa em evidência fina demais para mandar
+  # alguém à reunião. Mesmo princípio do is_actionable por eixo, aplicado ao todo.
+  min_global_confidence: 0.35
+
+  # Acima disto a empresa já é defensável: deixa de ser alvo de resgate técnico
+  # e vira candidata a case de sucesso do Inception.
+  defensible_threshold: 65.0
+
+  # Capacidade de agir a partir da qual a conversa é desta semana (ABORDAR_AGORA)
+  # em vez de trilha de comunidade (NUTRIR). É o corte mais consequente da fila.
+  capacity_threshold: 0.50
+
+# ---------------------------------------------------------------------------
 # Capacidade de agir — entra na fila de prioridade.
 # urgencia = risco_comoditizacao * capacity_to_act
 # ---------------------------------------------------------------------------
