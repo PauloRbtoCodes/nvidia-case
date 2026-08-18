@@ -28,8 +28,10 @@ from radar.models.recommendation import (
     RetrievedChunk,
 )
 from radar.models.scoring import (
+    ACTIONABLE_CONFIDENCE_THRESHOLD,
     AXIS_TO_NVIDIA_FAMILY,
     AXIS_WEIGHTS,
+    GAP_SCORE_THRESHOLD,
     AxisScore,
     DefensibilityAxis,
     DefensibilityScore,
@@ -42,7 +44,9 @@ from radar.models.scoring import (
 __all__ = [
     "AIMaturity",
     "AXIS_TO_NVIDIA_FAMILY",
+    "ACTIONABLE_CONFIDENCE_THRESHOLD",
     "AXIS_WEIGHTS",
+    "GAP_SCORE_THRESHOLD",
     "AxisScore",
     "Briefing",
     "Classification",

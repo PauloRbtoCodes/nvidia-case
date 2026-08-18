@@ -401,3 +401,96 @@ passada sobre uma empresa usa cache livremente; a passada de *monitoramento* for
 refresh nas fontes de sinal (carreiras, blog técnico) e mantém cache no
 institucional, que muda pouco. Implementação entra junto com o nó de comparação —
 antes disso não há passada de monitoramento para configurar.
+
+---
+
+## 11. Auditoria da camada de contratos (2026-09-09)
+
+Revisão de `src/radar/models/` — a camada que o projeto declara como fonte da
+verdade. Três achados, dois corrigidos aqui e um deixado como trabalho futuro.
+
+### 11.1 Os pesos estavam duplicados, e a duplicação quebrava uma promessa — **corrigido**
+
+`AXIS_WEIGHTS` está hardcoded em `models/scoring.py`, e os mesmos valores vivem em
+`scoring/weights.yaml`. Mas `total`, `global_confidence` e `gap_severity` usam o
+**dict hardcoded** — o YAML não participava da conta.
+
+Consequência: **recalibrar `weights.yaml` não mudava score nenhum**, contra a
+promessa registrada no `CLAUDE.md` ("premissas numéricas vivem em `weights.yaml`,
+versionadas — recalibrar não pode exigir re-scraping nem corromper histórico").
+
+E pior que não funcionar: `DefensibilityScore.weights_version` grava a versão do
+YAML. Depois de uma recalibração, o banco registraria `weights_version: "0.2.0"`
+num score calculado com os pesos de `0.1.0`. **Trilha de auditoria que mente é
+pior que trilha ausente** — é exatamente o modo de falha que o projeto inteiro
+existe para evitar.
+
+Os testes não pegavam: um verificava que o dict soma 1,0, outro que o YAML soma
+1,0, e nenhum que os dois são iguais. O mesmo valia para
+`actionable_confidence_threshold` (0,35) e `gap_score_threshold` (60,0), ambos
+literais inline.
+
+**Decisão: manter a duplicação, travar a divergência.**
+
+A alternativa — injetar os pesos e tirar o cálculo do modelo — resolveria a
+duplicação mas custaria caro: `total`, `weakest_axis` e `gap_severity` deixariam
+de ser `computed_field`, e com isso some a garantia de que *o eixo mais fraco é
+calculado igual em todo o sistema*. Essa garantia é o que impede uma segunda
+implementação divergente aparecer num serviço qualquer, e vale mais que a
+elegância de ter um único literal.
+
+O preço da escolha é pago por `test_pesos_do_modelo_espelham_o_yaml` e
+`test_limiares_do_modelo_espelham_o_yaml`, que falham com a mensagem exata do
+valor divergente. Verificado na prática: alterar o YAML quebra o CI.
+
+Os dois limiares viraram constantes nomeadas (`ACTIONABLE_CONFIDENCE_THRESHOLD`,
+`GAP_SCORE_THRESHOLD`) em vez de literais inline, para que a trava tenha o que
+comparar.
+
+### 11.2 Nada garantia que os quatro eixos eram distintos — **corrigido**
+
+`axes: list[AxisScore] = Field(min_length=4, max_length=4)` validava comprimento,
+não unicidade. Quatro `AxisScore` com o mesmo eixo passavam — e o estrago era
+silencioso: `total` somaria o mesmo peso quatro vezes, devolvendo número acima de
+100 com aparência de score válido, e `weakest_axis` viraria arbitrário.
+
+Não é hipótese remota: repetir um eixo e omitir outro é erro comum de geração
+estruturada por LLM, e o schema aceitava. `model_validator` de unicidade fecha o
+caso, com o eixo duplicado nomeado na mensagem.
+
+### 11.3 `computed_at` no `DefensibilityScore` — **adicionado**
+
+Pré-requisito do gatilho temporal, e a decisão não é óbvia: o timestamp já existe
+na coluna da tabela (`TimestampedMixin`), então por que duplicá-lo no modelo?
+
+**Porque a comparação entre duas execuções é aritmética, e portanto mora em
+`scoring/` — que não pode importar `persistence/` sem furar a direção de
+dependência da arquitetura.** Sem o campo no modelo, comparar dois scores exigiria
+carregar as datas por fora e mantê-las pareadas na mão, o que é frágil e move a
+lógica para onde ela não pertence. É também o que permite a saída dizer "mudou
+desde 12/08" em vez de apenas "mudou".
+
+Campo com `default_factory`, logo não quebra nada já construído.
+
+### 11.4 Campos que decidem sem carregar procedência — **trabalho futuro**
+
+`stage`, `headcount_estimate` e `founded_year` são tipos crus, não
+`EvidenceBackedField`. Mas `stage` alimenta `capacity_to_act`, que ordena a fila
+de prioridade — ou seja, **um campo sem procedência influencia a quem o gerente
+liga primeiro**, contra a regra do projeto de que todo campo inferido carrega suas
+evidências.
+
+Adiado porque toca extractor, prompt e tabela ao mesmo tempo, e a execução real
+tem precedência. Registrado para não se perder.
+
+Na mesma categoria: a restrição LGPD do `Founder` é docstring, não código — nada
+impede alguém acrescentar um campo de contato. Meio-termo barato quando for a hora:
+`extra="forbid"` no modelo, que ao menos impede campo novo entrar por acidente.
+
+### 11.5 O que foi considerado e recusado nesta camada
+
+| Mudança | Por que não |
+|---|---|
+| Mover `total` para `scoring/` | Perde a garantia de cálculo único do `weakest_axis`, que é o valor central da decisão de usar `computed_field` |
+| `axes` como `dict[Axis, AxisScore]` | Daria unicidade de graça, mas quebra serialização já gravada e os schemas da API. O validador resolve por muito menos |
+| `frozen=True` em todos os modelos | Construção incremental em alguns nós ficaria travada. Vale só para `Evidence`, cujo valor inteiro é ser imutável — fica como futuro |

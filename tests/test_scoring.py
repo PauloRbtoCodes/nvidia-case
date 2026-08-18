@@ -9,6 +9,7 @@ o teste precisa ser afrouxado.
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from radar.models.scoring import (
     AXIS_WEIGHTS,
@@ -170,3 +171,67 @@ def test_tco_admite_quando_migrar_nao_compensa():
 def test_tco_sem_custo_atual_nao_inventa_percentual():
     t = _tco(current=0.0, nvidia=800.0)
     assert t.savings_pct is None
+
+
+# --------------------------------------------------- espelho modelo ↔ weights.yaml
+
+
+def test_pesos_do_modelo_espelham_o_yaml():
+    """O teste que protege a promessa de recalibração do projeto.
+
+    `AXIS_WEIGHTS` está hardcoded em `models/scoring.py` porque `total` e
+    `gap_severity` são `computed_field` — é isso que garante que o eixo mais fraco
+    seja o mesmo em todo o sistema. O preço é a duplicação com `weights.yaml`,
+    que é a fonte de calibração declarada.
+
+    Sem este teste a duplicação é uma bomba-relógio: recalibrar o YAML não mudaria
+    score nenhum, e `DefensibilityScore.weights_version` gravaria no banco uma
+    versão que não produziu aquele número. Auditoria que mente é pior que
+    auditoria ausente.
+    """
+    from radar.scoring.weights import get_weights
+
+    yaml_weights = get_weights().axis_weights
+    modelo = {eixo.value: peso for eixo, peso in AXIS_WEIGHTS.items()}
+
+    assert modelo.keys() == yaml_weights.keys(), (
+        "eixos divergem entre models/scoring.py e scoring/weights.yaml"
+    )
+    for eixo, peso in modelo.items():
+        assert peso == pytest.approx(yaml_weights[eixo]), (
+            f"peso do eixo {eixo} diverge: modelo={peso}, yaml={yaml_weights[eixo]}"
+        )
+
+
+def test_limiares_do_modelo_espelham_o_yaml():
+    """Mesma armadilha dos pesos, para os dois limiares."""
+    from radar.models.scoring import ACTIONABLE_CONFIDENCE_THRESHOLD, GAP_SCORE_THRESHOLD
+    from radar.scoring.weights import get_weights
+
+    w = get_weights()
+    assert pytest.approx(w.actionable_confidence_threshold) == ACTIONABLE_CONFIDENCE_THRESHOLD
+    assert pytest.approx(w.gap_score_threshold) == GAP_SCORE_THRESHOLD
+
+
+# ------------------------------------------------------- unicidade dos eixos
+
+
+def test_eixo_repetido_e_recusado():
+    """Comprimento 4 não garante quatro eixos distintos.
+
+    O modo de falha é silencioso: `total` somaria o mesmo peso quatro vezes e
+    devolveria um número acima de 100 com cara de score válido.
+    """
+    eixo = _axis(DefensibilityAxis.PROPRIETARY_DATA, score=40.0, confidence=0.8)
+    with pytest.raises(ValidationError, match="eixos duplicados"):
+        DefensibilityScore(
+            company_name="Repetida",
+            axes=[eixo, eixo, eixo, eixo],
+            weights_version="teste",
+        )
+
+
+def test_score_valido_registra_quando_foi_calculado():
+    """`computed_at` existe para o eixo temporal comparar duas execuções."""
+    score = _score()
+    assert score.computed_at.tzinfo is not None, "timestamp precisa ser aware para comparar"

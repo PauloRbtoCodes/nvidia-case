@@ -13,9 +13,10 @@ de rigor. Todo AxisScore carrega os dois, e a UI é obrigada a distinguir.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field, computed_field, model_validator
 
 from radar.models.evidence import Evidence
 
@@ -36,12 +37,31 @@ class DefensibilityAxis(StrEnum):
     """Controla inferência, custo e latência — ou é repassador de API?"""
 
 
+#: ATENÇÃO — estes três valores são espelho de `scoring/weights.yaml`.
+#:
+#: Eles vivem aqui porque `total`, `gap_severity` e `weakest_axis` são
+#: `computed_field` do modelo, e é isso que garante que o eixo mais fraco seja
+#: calculado igual em todo o sistema: não existe uma segunda implementação num
+#: serviço que possa divergir. O custo dessa garantia é a duplicação com o YAML,
+#: que é a fonte de calibração declarada do projeto.
+#:
+#: `test_pesos_do_modelo_espelham_o_yaml` falha se os dois divergirem. Sem esse
+#: teste, recalibrar o YAML não mudaria score nenhum e `weights_version` gravaria
+#: no banco uma versão que não produziu aquele número — mentira silenciosa na
+#: trilha de auditoria, que é o oposto do que este projeto existe para fazer.
 AXIS_WEIGHTS: dict[DefensibilityAxis, float] = {
     DefensibilityAxis.PROPRIETARY_DATA: 0.30,
     DefensibilityAxis.WORKFLOW_DEPTH: 0.25,
     DefensibilityAxis.STACK_OWNERSHIP: 0.25,
     DefensibilityAxis.DISTRIBUTION: 0.20,
 }
+
+#: Espelho de `actionable_confidence_threshold`. Abaixo disso o eixo vira
+#: "evidência insuficiente" na UI, nunca nota baixa (ADR 0002).
+ACTIONABLE_CONFIDENCE_THRESHOLD = 0.35
+
+#: Espelho de `gap_score_threshold`. Abaixo disso o eixo é considerado gap.
+GAP_SCORE_THRESHOLD = 60.0
 
 #: Eixo fraco → famílias de tecnologia NVIDIA que endereçam aquele gap.
 #: Serve de gate determinístico antes do RAG: filtra o universo de candidatas
@@ -93,7 +113,7 @@ class AxisScore(BaseModel):
 
         A UI mostra esses eixos como "evidência insuficiente", não como nota baixa.
         """
-        return self.confidence >= 0.35
+        return self.confidence >= ACTIONABLE_CONFIDENCE_THRESHOLD
 
     @computed_field
     @property
@@ -168,6 +188,33 @@ class DefensibilityScore(BaseModel):
     tco: list[TCOEstimate] = Field(default_factory=list)
     weights_version: str
 
+    computed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    """Quando este score foi calculado.
+
+    Está no modelo, e não só na coluna da tabela, porque a comparação entre duas
+    execuções (o gatilho temporal do radar) é aritmética e portanto mora em
+    `scoring/` — que não pode importar `persistence/` sem furar a direção de
+    dependência da arquitetura. Sem o campo aqui, comparar dois scores exigiria
+    carregar as datas por fora e mantê-las pareadas na mão.
+
+    Também é o que permite a saída dizer "mudou desde 12/08" em vez de só "mudou".
+    """
+
+    @model_validator(mode="after")
+    def _eixos_sao_distintos(self) -> DefensibilityScore:
+        """Quatro eixos, um de cada. Comprimento sozinho não garante isso.
+
+        Repetir um eixo e omitir outro é erro comum de geração estruturada, e o
+        estrago é silencioso: `total` somaria o mesmo peso quatro vezes (score
+        acima de 100) e `weakest_axis` viraria arbitrário — com aparência de
+        número válido, que é o pior modo de falha possível aqui.
+        """
+        vistos = [a.axis for a in self.axes]
+        if len(set(vistos)) != len(vistos):
+            duplicados = sorted({e.value for e in vistos if vistos.count(e) > 1})
+            raise ValueError(f"eixos duplicados em DefensibilityScore: {duplicados}")
+        return self
+
     @computed_field
     @property
     def total(self) -> float:
@@ -200,7 +247,7 @@ class DefensibilityScore(BaseModel):
     @property
     def actionable_gaps(self) -> list[DefensibilityAxis]:
         """Eixos com gap real E evidência suficiente, do mais severo ao menos."""
-        gaps = [a for a in self.axes if a.is_actionable and a.score < 60.0]
+        gaps = [a for a in self.axes if a.is_actionable and a.score < GAP_SCORE_THRESHOLD]
         return [a.axis for a in sorted(gaps, key=lambda a: a.gap_severity, reverse=True)]
 
     def candidate_technologies(self) -> list[str]:
