@@ -47,3 +47,18 @@ class RateLimitError(LLMError):
     def __init__(self, message: str, *, retry_after: float | None = None) -> None:
         super().__init__(message)
         self.retry_after = retry_after
+
+
+class BudgetExceededError(LLMError):
+    """Teto de chamadas de LLM da execução foi atingido.
+
+    Não é falha de infraestrutura: é o sistema se recusando a continuar gastando
+    cota. Sobe como `NodeFailure` não-recuperável para que o relatório mostre
+    quais empresas ficaram sem diagnóstico e por quê — retry aqui só queimaria o
+    que sobrou.
+    """
+
+    def __init__(self, message: str, *, used: int, limit: int) -> None:
+        super().__init__(message)
+        self.used = used
+        self.limit = limit

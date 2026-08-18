@@ -52,6 +52,22 @@ class Settings(BaseSettings):
     scraper_cache_dir: Path = Path("data/cache")
     scraper_timeout_seconds: float = 20.0
 
+    # Governança de cota do LLM
+    llm_max_concurrency: int = 4
+    """Chamadas simultâneas ao NIM. O fan-out `Send` do grafo dispara uma rajada
+    por empresa; sem teto, N empresas viram N rajadas e o 429 chega para todas."""
+
+    llm_max_calls_per_run: int = 400
+    """Teto de chamadas por execução do grafo. Evita que um dia ruim da API
+    transforme retry legítimo em cota inteira consumida sem diagnóstico."""
+
+    llm_cache_enabled: bool = True
+    llm_cache_dir: Path = Path("data/cache/llm")
+    llm_cache_ttl_seconds: float = 7 * 24 * 3600
+    """Cache de resposta do modelo, chaveado pelo conteúdo exato do prompt.
+    Mudou a evidência raspada, muda a chave — por isso não mascara mudança de
+    sinal e pode ficar ligado por padrão."""
+
     # RAG
     chunk_size_tokens: int = 768
     chunk_overlap_ratio: float = 0.15
@@ -64,6 +80,11 @@ class Settings(BaseSettings):
     @property
     def cache_dir(self) -> Path:
         path = self.scraper_cache_dir
+        return path if path.is_absolute() else PROJECT_ROOT / path
+
+    @property
+    def llm_cache_path(self) -> Path:
+        path = self.llm_cache_dir
         return path if path.is_absolute() else PROJECT_ROOT / path
 
     @property

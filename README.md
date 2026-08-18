@@ -57,6 +57,31 @@ Plano completo em [`docs/plano-arquitetura.md`](docs/plano-arquitetura.md). Deci
 | Observabilidade | Langfuse self-hosted |
 | Avaliação | RAGAS · golden dataset · labels manuais do classificador |
 
+## Mapa: conceito → arquivos
+
+A estrutura é cortada por **preocupação técnica** (`models/`, `scraping/`, `rag/`,
+`llm/`, `scoring/`, `persistence/`), não por fatia de negócio. A fronteira que isso
+preserva é "toca a rede / não toca" — `scoring/` é aritmética pura e testável sem
+mock nenhum, o que é o que permite a suíte rodar offline. O custo é dispersão: um
+conceito atravessa várias pastas. Este mapa é a compensação escolhida (a análise
+completa está em [`docs/governanca-e-tradeoffs.md`](docs/governanca-e-tradeoffs.md), §9).
+
+| Conceito | Contrato | Lógica | Nó do grafo | Prompt | Tabela |
+|---|---|---|---|---|---|
+| Evidência | `models/evidence.py` | — | `graph/nodes/validator.py` | `evidence_validator_v1.md` | `evidences` |
+| Perfil da empresa | `models/company.py` | `scraping/extract.py` | `graph/nodes/extractor.py` | `extractor_v1.md` | `companies` |
+| Classificação AI-native | `models/company.py` | — | `graph/nodes/classifier.py` | `classifier_v1.md` | `classifications` |
+| **Defensibility Score** | `models/scoring.py` | `scoring/weights.py` + `weights.yaml` | `graph/nodes/scorer.py` | `defensibility_scorer_v1.md` | `defensibility_scores` |
+| TCO | `models/scoring.py` | `scoring/tco.py` | `graph/nodes/scorer.py` | — | `tco_estimates` |
+| Fila de prioridade | `models/scoring.py` | `scoring/priority.py` | `graph/build.py` (consolidate) | — | `priority_assessments` |
+| Recomendação | `models/recommendation.py` | `rag/hybrid.py` + `rag/rerank.py` | `graph/nodes/recommender.py` | `recommender_v1.md` | `recommendations` |
+| Briefing | `models/recommendation.py` | — | `graph/nodes/briefing.py` | `briefing_v1.md` | `briefings` |
+| Busca e descoberta | — | `scraping/search.py` | `planner.py`, `discovery.py` | `search_planner_v1.md` | — |
+| Cota e cache de LLM | — | `llm/quota.py`, `llm/cache.py` | (em `llm/client.py`) | — | — |
+
+Regra que atravessa a tabela: **`models/` é a fonte da verdade.** Tabelas do
+Postgres e schemas da API derivam dele; nada de tipo duplicado divergindo.
+
 ## Como rodar
 
 **Pré-requisitos:** Python 3.12+, [uv](https://docs.astral.sh/uv/), Docker, Node 20+.

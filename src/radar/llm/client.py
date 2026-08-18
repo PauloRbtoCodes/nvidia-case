@@ -27,6 +27,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Callable, Sequence
+from datetime import UTC, datetime
 from typing import Any, Protocol, TypeVar
 
 import structlog
@@ -40,9 +41,11 @@ from tenacity import (
 )
 
 from radar.config import Settings, get_settings
+from radar.llm.cache import CachedCompletion, CompletionCache, fingerprint
 from radar.llm.errors import LLMError, RateLimitError, SchemaValidationError
 from radar.llm.model_registry import LLMTask, ModelRegistry
 from radar.llm.observability import Observer, build_observer
+from radar.llm.quota import ConcurrencyGate, LLMBudget
 from radar.llm.registry import PromptRegistry, RenderedPrompt, get_prompt_registry
 
 log = structlog.get_logger(__name__)
@@ -141,6 +144,19 @@ def _format_validation_error(exc: ValidationError) -> str:
     return "\n".join(linhas)
 
 
+def _default_cache(settings: Settings) -> CompletionCache | None:
+    """Cache ligado por padrão, desligável por configuração.
+
+    Ligado porque o ciclo de trabalho é iterar sobre o mesmo lote; a chave inclui
+    o conteúdo do prompt, então nenhum sinal novo é escondido por ele.
+    """
+    if not settings.llm_cache_enabled:
+        return None
+    return CompletionCache(
+        settings.llm_cache_path, ttl_seconds=settings.llm_cache_ttl_seconds
+    )
+
+
 class NIMClient:
     """Wrapper sobre `ChatNVIDIA` com saída estruturada, retry e traces."""
 
@@ -154,6 +170,9 @@ class NIMClient:
         chat_factory: ChatFactory | None = None,
         transport_attempts: int = DEFAULT_TRANSPORT_ATTEMPTS,
         validation_attempts: int = DEFAULT_VALIDATION_ATTEMPTS,
+        gate: ConcurrencyGate | None = None,
+        budget: LLMBudget | None = None,
+        cache: CompletionCache | None = None,
     ) -> None:
         self.settings = settings or get_settings()
         self.models = models or ModelRegistry.from_settings(self.settings)
@@ -164,6 +183,12 @@ class NIMClient:
 
         self._chat_factory = chat_factory or self._default_chat_factory
         self._backends: dict[tuple[str, float], ChatBackend] = {}
+
+        # Cota e cache são do cliente, não do nó: só quem é compartilhado pela
+        # execução inteira sabe quantas chamadas estão em voo e quantas já foram.
+        self.gate = gate or ConcurrencyGate(self.settings.llm_max_concurrency)
+        self.budget = budget or LLMBudget(self.settings.llm_max_calls_per_run)
+        self.cache = cache if cache is not None else _default_cache(self.settings)
 
     # ------------------------------------------------------------------ backend
 
@@ -189,8 +214,41 @@ class NIMClient:
 
     # ------------------------------------------------------------- chamada crua
 
-    def _invoke(self, backend: ChatBackend, messages: list[BaseMessage]) -> str:
-        """Uma chamada, com retry de transporte/429. Não sabe nada de schema."""
+    @staticmethod
+    def _as_pairs(messages: Sequence[BaseMessage]) -> list[tuple[str, str]]:
+        return [(m.type, str(m.content)) for m in messages]
+
+    def _invoke(self, task: LLMTask, messages: list[BaseMessage]) -> str:
+        """Uma chamada, com cache, cota e retry de transporte/429.
+
+        A ordem importa e não é arbitrária:
+
+        1. **Cache primeiro.** Acerto não consome orçamento nem ocupa vaga de
+           concorrência — não houve chamada. Contabilizar cache como gasto
+           esvaziaria o orçamento sem pressionar a API.
+        2. **Orçamento antes do semáforo.** Recusar cedo evita que uma thread
+           fique bloqueada esperando vaga para uma chamada que já está proibida.
+        3. **Semáforo em volta do retry inteiro**, não de cada tentativa. Quem
+           está em backoff de 429 continua ocupando vaga de propósito: liberar a
+           vaga durante a espera deixaria outra thread entrar e tomar o mesmo
+           429, que é exatamente o efeito que o teto existe para evitar.
+        """
+        backend = self.backend_for(task)
+        model = self.models.model_for(task)
+        temperature = self.models.temperature_for(task)
+
+        chave: str | None = None
+        if self.cache is not None:
+            chave = fingerprint(model, temperature, self._as_pairs(messages))
+            entrada = self.cache.get(chave)
+            if entrada is not None:
+                self.budget.record_cache_hit()
+                log.debug("llm_cache_hit", task=task.value, model=model, key=chave[:12])
+                return entrada.output
+
+        restante = self.budget.consume()
+        if restante <= 10:
+            log.warning("orcamento_llm_no_fim", restante=restante, teto=self.budget.max_calls)
 
         def _once() -> str:
             try:
@@ -208,13 +266,26 @@ class NIMClient:
                 )
             return str(conteudo)
 
-        for tentativa in Retrying(
-            stop=stop_after_attempt(self.transport_attempts),
-            wait=_transport_wait,
-            reraise=True,
-        ):
-            with tentativa:
-                return _once()
+        with self.gate.hold():
+            for tentativa in Retrying(
+                stop=stop_after_attempt(self.transport_attempts),
+                wait=_transport_wait,
+                reraise=True,
+            ):
+                with tentativa:
+                    saida = _once()
+                    if self.cache is not None and chave is not None:
+                        self.cache.set(
+                            chave,
+                            CachedCompletion(
+                                model=model,
+                                temperature=temperature,
+                                prompt_fingerprint=chave,
+                                output=saida,
+                                created_at=datetime.now(UTC),
+                            ),
+                        )
+                    return saida
 
         raise LLMError("Retry de transporte terminou sem resultado.")  # pragma: no cover
 
@@ -235,7 +306,6 @@ class NIMClient:
         tentativa, porque o erro aponta o campo exato — é bem mais barato que
         recomeçar do zero com o mesmo prompt.
         """
-        backend = self.backend_for(task)
         model_id = self.models.model_for(task)
 
         base_messages: list[BaseMessage] = [
@@ -262,7 +332,7 @@ class NIMClient:
             ):
                 with tentativa:
                     numero = tentativa.retry_state.attempt_number
-                    raw = self._invoke(backend, messages)
+                    raw = self._invoke(task, messages)
                     try:
                         objeto = _validate(schema, raw)
                     except SchemaValidationError as exc:
@@ -325,12 +395,19 @@ class NIMClient:
             prompt_input={"system": prompt.system, "user": prompt.user},
             metadata={"task": task.value, "prompt_version": prompt.prompt_version},
         ) as span:
-            saida = self._invoke(self.backend_for(task), messages)
+            saida = self._invoke(task, messages)
             span.update(output=saida)
             return saida
 
     def flush(self) -> None:
-        """Descarrega traces pendentes — chamar ao fim de uma execução do grafo."""
+        """Descarrega traces e reporta o consumo de cota da execução.
+
+        O consumo sai no log de fim de lote porque é a única forma de saber, sem
+        abrir o painel do NIM, se o lote passou perto do teto. Um lote que
+        terminou em 380/400 chamadas passou raspando e o próximo, com uma empresa
+        a mais, vai estourar.
+        """
+        log.info("cota_llm", **self.budget.snapshot())
         self.observer.flush()
 
 

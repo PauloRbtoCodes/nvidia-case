@@ -62,7 +62,15 @@ class FakeChat:
 
 def build_client(respostas: list[str | Exception], **kwargs: Any) -> tuple[NIMClient, FakeChat]:
     fake = FakeChat(respostas)
-    settings = Settings(nvidia_api_key="", langfuse_public_key="", langfuse_secret_key="")
+    # Cache desligado: estes testes exercitam o caminho de chamada ao modelo
+    # (retry, validação, 429). Com cache ligado a segunda chamada idêntica não
+    # chegaria ao dublê e o teste passaria a medir o cache, não o cliente.
+    settings = Settings(
+        nvidia_api_key="",
+        langfuse_public_key="",
+        langfuse_secret_key="",
+        llm_cache_enabled=False,
+    )
     cliente = NIMClient(
         settings=settings,
         observer=NullObserver(),

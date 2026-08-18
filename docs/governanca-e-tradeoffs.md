@@ -232,3 +232,172 @@ O projeto está pronto quando um gerente hipotético consegue, em uma sessão:
 
 Se os cinco acontecem contra APIs reais, o case está entregue. Nenhuma feature
 adicional compensa a falha de qualquer um dos cinco.
+
+---
+
+## 9. Alternativas de arquitetura consideradas
+
+Registro honesto: **o corte atual não foi escolhido contra alternativas.** A seção
+3 do `plano-arquitetura.md` apresenta a estrutura já pronta e justifica apenas a
+regra de `models/` como fonte da verdade. O layout horizontal (`models/`,
+`scraping/`, `rag/`, `llm/`, `persistence/`) é a convenção default do ecossistema
+Python, reforçada pelo layout que a própria documentação do LangGraph usa
+(`state.py`, `nodes/`, `build.py`).
+
+Ele se provou adequado *a posteriori*, por três forças que só ficaram visíveis
+depois. A avaliação formal abaixo foi feita em 2026-09-09, e é ela que permite
+dizer "escolhemos" em vez de "seguimos a corrente".
+
+### Por que o corte horizontal se sustenta
+
+1. **Ausência de acesso às APIs reais durante o desenvolvimento.** Sem Docker e
+   sem chaves, a única forma de progredir era construir contra dublês — o que
+   exige capacidades injetáveis. `NodeDeps` não é purismo; é o que viabilizou
+   287 testes e um mês de trabalho sem rede.
+2. **A tese do projeto é auditabilidade.** "Nenhuma afirmação sem evidência" só é
+   crível se cada peça for verificável isoladamente. Separação vira pré-requisito
+   de argumento, não de organização.
+3. **O histórico de commits é avaliado.** Camadas independentes produzem um
+   commit coerente por vez.
+
+### As alternativas, e o que cada uma custaria
+
+| Alternativa | Ganharia | Perderia | Veredito |
+|---|---|---|---|
+| Script linear num arquivo | Velocidade; roda no dia 1 | Intestável sem rede (fatal aqui); nenhum argumento de rigor | Certo para um protótipo de uma semana. Não é o caso |
+| **Fatias verticais** (`descoberta/`, `diagnostico/`, `recomendacao/`) | Coesão: um conceito, uma pasta | A fronteira "toca rede / não toca"; `models/` como fonte única tende a virar 3 cópias; infra duplicada | **Rejeitada** — ver abaixo |
+| Hexagonal / Ports & Adapters completo | Direção de dependência explícita e verificável | Cerimônia | **Parcialmente adotada** — ver abaixo |
+| Orientado a eventos (Celery/Kafka) | Escala horizontal; resolveria `api/runs.py` em memória | Infra indisponível; debug muito pior; volume não justifica | Over-engineering. Citável como "o caminho se virasse produção" |
+| Agente ReAct único com ferramentas | Muito menos código | **Mata o projeto**: ordem não determinística impede garantir que o validador rodou antes do scorer, e os três invariantes deixam de ser demonstráveis | Rejeitada. É o anti-padrão que o próprio case critica |
+| Data pipeline / ELT (dbt) | Histórico temporal quase de graça; linhagem nativa | LLM e RAG ficam desconfortáveis; perde a narrativa multi-agente do enunciado | Rejeitada como arquitetura; **ideia aproveitada** na tabela `defensibility_scores` append-only com `weights_version` |
+| Microsserviços | Nada, nesta escala | Tudo | Rejeitada |
+
+### Fatias verticais — a decisão detalhada
+
+É a alternativa séria, e resolve uma dor real: hoje, para entender defensibilidade
+de ponta a ponta, é preciso abrir cinco diretórios (`models/scoring.py`,
+`scoring/weights.*`, `graph/nodes/scorer.py`, `llm/prompts/defensibility_scorer_v1.md`,
+`persistence/tables.py`). Isso é custo de compreensão real num projeto cujo
+repositório será lido por um avaliador.
+
+**Rejeitada assim mesmo**, por quatro motivos:
+
+1. **Erosão da fronteira rede / não-rede.** `scoring/` hoje é aritmética pura.
+   Numa fatia `diagnostico/`, o cálculo do peso e a chamada de LLM que gera o
+   rationale ficam vizinhos, e a primeira pessoa que precisar testar a regra de
+   peso vai mockar rede. A propriedade se perde por erosão, não por decisão.
+2. **Racha o `models/` único.** Cada fatia tende a ganhar seu próprio `models.py`,
+   e `Evidence` passa a existir em três versões levemente diferentes — o que
+   destrói a rastreabilidade, que é a tese do projeto.
+3. **Duplica infraestrutura.** Cliente NIM, retry, cache, gate de robots são
+   usados por várias fatias. Ou vira `shared/` (horizontal de novo) ou vira cópia
+   divergente.
+4. **Custo do momento.** Reorganizar o repositório na semana em que é preciso
+   rodar contra API real e construir três telas, com 287 testes atravessando.
+
+**Mitigação escolhida:** o custo de compreensão se resolve com documentação, não
+com pastas — o mapa "conceito → arquivos" no README. Vinte minutos contra uma
+semana de refatoração.
+
+### Hexagonal — o que foi adotado e o que não
+
+O projeto já está a ~70% de Ports & Adapters sem ter nomeado: `NodeDeps` é o
+container de portas, `scraping/`/`rag/`/`llm/` são adaptadores, e a suíte roda
+offline porque a inversão de dependência já existe de fato.
+
+Adotar o formalismo restante (declarar `Protocol` para cada dependência) tem custo
+quase zero e **um ganho prático, não retórico**: hoje nada impede um nó de
+importar `tavily` direto e furar o `NodeDeps`. Funcionaria, passaria no lint, e só
+quebraria contra a rede real. Como nada nunca rodou contra API real, esse é um
+risco vivo. Fica como trabalho de baixo custo e alta prioridade.
+
+**O que hexagonal NÃO resolve:** a dispersão de conceito. Ele também é um corte
+horizontal — acrescenta uma camada de interfaces. Fatia resolve *coesão*;
+hexagonal resolve *direção de dependência*. São problemas diferentes.
+
+---
+
+## 10. Preparação para a execução real (implementado em 2026-09-09)
+
+A fundação estava mais preparada para rede hostil do que o discurso do projeto
+sugeria. Já existia, verificado em código: `RobotsCache` com `crawl_delay`,
+`DomainRateLimiter` por domínio, timeouts de settings, retry com backoff
+exponencial em erro de transporte, fallback Playwright, **dois níveis de retry no
+LLM** (transporte/429 honrando `Retry-After`, e validação reenviando o erro de
+schema), `node_guard` transformando exceção em `NodeFailure`, e cache de resposta
+HTTP.
+
+O que faltava não era arquitetura — era **operação**. Três lacunas, agora fechadas
+em `src/radar/llm/quota.py` e `src/radar/llm/cache.py`:
+
+### 10.1 Teto de concorrência (`ConcurrencyGate`)
+
+O `Send` faz fan-out para N empresas, e os nós são `async` empurrando a chamada
+síncrona para thread. Sem teto, N empresas viram N rajadas simultâneas: o 429
+chega para todas ao mesmo tempo, cada uma entra em backoff, e o lote fica mais
+lento do que se tivesse sido serializado — com a cota queimada nas tentativas
+perdidas.
+
+Semáforo de `threading`, não de `asyncio`, porque quem chama já está fora do event
+loop. Padrão 4, conservador de propósito: a cota gratuita não documenta o limite
+de concorrência, e descobri-lo por tentativa e erro custa a própria cota.
+
+**Trade-off:** lote mais lento em troca de previsível. Aceito — o gargalo real do
+projeto é cota, não tempo de parede.
+
+### 10.2 Orçamento por execução (`LLMBudget`)
+
+Retry existe porque falha é esperada; retry sem teto transforma um dia ruim da API
+em cota inteira consumida sem nenhum diagnóstico. O orçamento **levanta
+`BudgetExceededError` em vez de degradar em silêncio**: um lote que parou por cota
+precisa aparecer como falha no relatório, não como metade das empresas sem
+briefing e nenhuma explicação — a lacuna não declarada que o projeto evita.
+
+Conta **chamadas, não tokens**. Tokenizar antes de cada envio custaria CPU no
+caminho quente para uma precisão que não muda a decisão: a pergunta é "o lote saiu
+do controle?", e número de chamadas responde. Padrão 400 ≈ 12 empresas × 6 nós de
+LLM × margem de retry.
+
+O consumo é logado em `NIMClient.flush()`, ao fim do lote. Um lote que terminou em
+380/400 passou raspando, e o próximo estoura.
+
+### 10.3 Cache de resposta do LLM (`CompletionCache`)
+
+O scraping tinha cache; a chamada de modelo não. Reexecutar o mesmo lote pagava
+tudo de novo — justamente na fase de iteração contra API real.
+
+**A propriedade que torna seguro ligar por padrão:** a chave é o hash de
+`(modelo, temperatura, mensagens)`. A evidência raspada entra no prompt, então
+página mudou → prompt mudou → chave mudou. **O cache não consegue mascarar mudança
+de sinal**, o que era o risco de conflito com o eixo temporal do radar. Travado em
+`test_prompt_diferente_e_chave_diferente`.
+
+Efeito colateral desejado: reexecução vira determinística. Com temperatura > 0 o
+modelo varia entre chamadas, e cada demonstração do case mostraria números
+diferentes. Com cache, mesma entrada → mesma saída, e `weights_version` continua
+sendo o que explica mudança de score (ADR 0002).
+
+### 10.4 Isolamento de cache na suíte (`tests/conftest.py`)
+
+Bug real encontrado ao ligar o cache: a suíte gravou respostas dos dublês em
+`data/cache/llm` e, na execução seguinte, os testes do grafo leram de lá. O efeito
+foi silencioso e perverso — um teste que injeta `RuntimeError("modelo fora do ar")`
+no planner passou a receber resposta válida do cache, e a falha que ele existia
+para verificar deixou de acontecer.
+
+Duas lições registradas: **cache em disco é estado global**, e **a configuração
+padrão do produto não é a da suíte** (cache é desejável em produção e nocivo em
+teste de retry e degradação).
+
+### 10.5 Política de frescor — decidida, implementação adiada
+
+O TTL de 7 dias do cache de scraping **colide com o gatilho temporal**: rodar hoje
+e de novo em três dias devolve a página cacheada, e o diff conclui "nada mudou"
+sem ter olhado. `force_refresh` existe em `fetch()`, mas nada no grafo decide
+quando usá-lo.
+
+É decisão de produto disfarçada de parâmetro. **Política definida:** a primeira
+passada sobre uma empresa usa cache livremente; a passada de *monitoramento* força
+refresh nas fontes de sinal (carreiras, blog técnico) e mantém cache no
+institucional, que muda pouco. Implementação entra junto com o nó de comparação —
+antes disso não há passada de monitoramento para configurar.
