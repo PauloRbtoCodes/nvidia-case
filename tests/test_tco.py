@@ -134,3 +134,41 @@ def test_todos_cenarios_devolve_tres():
     ests = estimar_todos_cenarios("analise_documentos", provider="google_gemini_pro")
     assert len(ests) == 3
     assert {e.scenario for e in ests} == set(TCOScenario)
+
+
+# ------------------------------------- chaves de product.py ↔ weights.yaml
+
+
+def test_categorias_de_produto_casam_com_os_volumes_do_yaml():
+    """Mesma armadilha dos cards, no motor de TCO.
+
+    `inferir_categoria_produto` devolve uma chave que o TCO usa em
+    `volume_base_tokens_mes.get(categoria, ...["desconhecido"])` — com **fallback
+    silencioso**. Uma categoria renomeada no YAML não quebra nada: vira
+    `desconhecido` e o volume base cai de 250M para 50M tokens/mês. Erro de 5×
+    na premissa mais frágil da cadeia, sem uma linha de log.
+
+    A trava é nas duas direções, como em `test_cards.py`: chave órfã no código e
+    chave órfã no YAML são ambas bug.
+    """
+    from radar.scoring.product import CATEGORY_KEYWORDS, DEFAULT_CATEGORY
+
+    no_codigo = {categoria for categoria, _ in CATEGORY_KEYWORDS} | {DEFAULT_CATEGORY}
+    no_yaml = set(get_weights().tco.volume_base_tokens_mes)
+
+    assert no_codigo == no_yaml, (
+        f"só no código: {sorted(no_codigo - no_yaml)}; só no yaml: {sorted(no_yaml - no_codigo)}"
+    )
+
+
+def test_provedores_casam_com_a_tabela_de_precos_do_yaml():
+    """Aqui o fallback não é silencioso — é `KeyError` — mas quebrar em produção
+    por chave renomeada continua sendo evitável em CI."""
+    from radar.scoring.product import DEFAULT_PROVIDER_KEY, PROVIDER_KEYWORDS
+
+    no_codigo = {chave for chave, _ in PROVIDER_KEYWORDS} | {DEFAULT_PROVIDER_KEY}
+    no_yaml = set(get_weights().tco.api_pricing_usd_per_1m_tokens)
+
+    assert no_codigo == no_yaml, (
+        f"só no código: {sorted(no_codigo - no_yaml)}; só no yaml: {sorted(no_yaml - no_codigo)}"
+    )
