@@ -124,6 +124,19 @@ class HybridRetriever:
         self.bm25_index = bm25_index
         self.embedder = embedder
 
+        # Índice lexical vazio não impede a busca: ela degrada para densa pura e
+        # a fusão vira uma cópia do ranking do Qdrant. O problema é o silêncio —
+        # `make ingest` que morreu depois de popular o Qdrant e antes de salvar o
+        # BM25 deixa exatamente este estado, e a recomendação sai pior sem que
+        # nada no relatório explique por quê. `radar.cli check` avisa o operador;
+        # este log cobre a execução que não passou por ele.
+        if len(bm25_index) == 0:
+            log.warning(
+                "bm25_vazio_busca_degradada",
+                impacto="fusao vira densa pura; match exato de nome de produto se perde",
+                acao="rode `make ingest`",
+            )
+
     def retrieve(
         self,
         query: str,
