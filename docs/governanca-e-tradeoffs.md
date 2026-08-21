@@ -494,3 +494,94 @@ impede alguém acrescentar um campo de contato. Meio-termo barato quando for a h
 | Mover `total` para `scoring/` | Perde a garantia de cálculo único do `weakest_axis`, que é o valor central da decisão de usar `computed_field` |
 | `axes` como `dict[Axis, AxisScore]` | Daria unicidade de graça, mas quebra serialização já gravada e os schemas da API. O validador resolve por muito menos |
 | `frozen=True` em todos os modelos | Construção incremental em alguns nós ficaria travada. Vale só para `Evidence`, cujo valor inteiro é ser imutável — fica como futuro |
+
+---
+
+## 12. Auditoria da camada de capacidades (2026-09-09)
+
+Varredura motivada pelo achado da camada 1: se um espelho hardcoded existiu uma
+vez, costuma existir duas. Encontrou um padrão **irmão, não idêntico**.
+
+### 12.1 Cortes da fila fora do arquivo de calibração — corrigido
+
+`priority.py` tinha três números decidindo a fila, nenhum deles em `weights.yaml`:
+`MIN_GLOBAL_CONFIDENCE = 0.35`, `DEFENSIBLE_THRESHOLD = 65.0` e o literal sem
+nome `capacidade >= 0.5`.
+
+Não é o mesmo bug da camada 1 (espelho divergente) e sim outro: **premissa de
+calibração que nunca esteve no arquivo de calibração**, contra a regra do
+`CLAUDE.md`. O efeito prático é o mesmo, porém: a calibração da semana 4 quer
+ajustar exatamente esses cortes, e sem eles no YAML isso exigiria mudança de
+código, ficaria fora de `weights_version`, e produziria histórico incomparável
+sem nada registrando a diferença entre as duas escalas.
+
+O corte de capacidade era o pior: um literal anônimo dentro de um `if`, decidindo
+se a empresa é conversa desta semana ou trilha de comunidade — o número mais
+consequente da fila inteira.
+
+### 12.2 Chaves de `product.py` sem trava contra o YAML — corrigido
+
+`inferir_categoria_produto` devolve uma chave consumida pelo TCO como
+`volume_base_tokens_mes.get(categoria, ...["desconhecido"])` — **fallback
+silencioso**. Categoria renomeada no YAML não quebra nada: vira `desconhecido`, e
+o volume base cai de 250M para 50M tokens/mês. **Erro de 5× na premissa mais
+frágil da cadeia, sem uma linha de log.**
+
+É exatamente o padrão que `test_cards.py` já travava para
+`AXIS_TO_NVIDIA_FAMILY` — reconhecido uma vez e não aplicado aqui. A trava agora
+é nas duas direções, para categorias e provedores.
+
+Assimetria que ficou registrada: a chave de categoria falha em silêncio, a de
+provedor levanta `KeyError`. Duas políticas para o mesmo tipo de erro no mesmo
+módulo. Não uniformizado agora porque mudar o fallback da categoria muda
+comportamento de produto (uma categoria desconhecida legítima deve mesmo cair em
+`desconhecido`); o que faltava era a trava de CI, não a mudança de política.
+
+### 12.3 Degradação silenciosa do BM25 — corrigido
+
+`make ingest` popula o Qdrant dentro do laço e salva o BM25 só no fim. Processo
+que morre entre as duas coisas deixa o Qdrant à frente do índice lexical, e a
+fusão RRF vira cópia do ranking denso. Match exato de nome de produto — "Triton",
+"TensorRT-LLM" — é o que o sinal lexical carrega, e é o primeiro a se perder.
+
+`radar.cli check` já avisava o operador; faltava cobrir a execução que não passa
+por ele. Aviso adicionado na construção do `HybridRetriever`.
+
+Não corrigida a causa raiz (ordem de escrita entre Qdrant e BM25): exigiria
+transacionar dois sistemas que não compartilham transação. Tornar visível é a
+resposta proporcional ao risco num projeto deste porte.
+
+---
+
+## 13. Primeira execução contra infraestrutura real (2026-09-09)
+
+**O bloqueador de Docker caiu.** O `CHECKPOINT` de 14/08 registrava Docker como
+pendente por exigir `sudo`; ele está funcionando.
+
+Consequência imediata: metade da "execução real" deixou de ser hipótese.
+
+| Verificado de verdade | Resultado |
+|---|---|
+| `docker compose up -d` | 4 contêineres no ar (Postgres, Qdrant, Langfuse + banco próprio) |
+| `alembic upgrade head` contra Postgres real | 10 tabelas + `alembic_version` criadas |
+| Colunas JSONB | 17 colunas, JSONB de fato — não TEXT com JSON dentro |
+| Suíte com `TEST_DATABASE_URL` | **305 passed, 0 skipped** |
+| `radar.cli check` | funciona e reporta com precisão o que falta |
+
+O teste `test_jsonb_e_usado_no_postgres`, skipado desde o início do projeto,
+rodou. A camada de persistência deixou de ser validada apenas contra dublê
+SQLite — que era a maior incerteza depois das chaves de API.
+
+### O que continua bloqueado
+
+Só uma coisa, agora: **as três chaves de API.** Não há `.env` na máquina.
+
+- `NVIDIA_API_KEY` — bloqueante. Sem ela nenhum agente roda, e `make ingest` não
+  popula o Qdrant (embeddings vêm do NIM).
+- `TAVILY_API_KEY` — descoberta indisponível; o grafo ainda roda a partir de URLs
+  semente.
+- `COHERE_API_KEY` — rerank cai para a ordem do RRF, degradação já tratada.
+
+Com a chave do NIM, o caminho completo abre na mesma sessão: `make ingest` →
+`make run` com 5 empresas. Os três controles de cota implementados em §10 existem
+precisamente para essa primeira execução não queimar o crédito gratuito.
