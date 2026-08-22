@@ -103,10 +103,14 @@ def build_deps(
     retriever: HybridRetriever | None = None
     if with_retriever:
         try:
+            # A dimensão vem do embedder, nunca do default: criar a coleção com
+            # o tamanho errado só falha na primeira busca, depois de a ingestão
+            # inteira ter sido paga.
+            embedder = build_embedding_client()
             retriever = HybridRetriever(
-                knowledge_base=build_knowledge_base(),
+                knowledge_base=build_knowledge_base(vector_size=embedder.dimension),
                 bm25_index=BM25Index.load(),
-                embedder=build_embedding_client(),
+                embedder=embedder,
             )
         except Exception:  # noqa: BLE001 - Qdrant fora do ar é caso esperado
             retriever = None

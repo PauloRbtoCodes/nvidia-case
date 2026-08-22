@@ -196,11 +196,18 @@ class NIMClient:
         """Importado aqui dentro para que testes sem chave de API nem carreguem o SDK."""
         from langchain_nvidia_ai_endpoints import ChatNVIDIA
 
+        extras: dict[str, Any] = {}
+        if self.settings.nim_disable_thinking:
+            # Kwarg direto, e nao `extra_body`: o wrapper move extra_body para
+            # model_kwargs e a API responde 400. Ver Settings.nim_disable_thinking.
+            extras["chat_template_kwargs"] = {"enable_thinking": False}
+
         return ChatNVIDIA(
             model=model,
             api_key=self.settings.nvidia_api_key,
             base_url=self.settings.nim_base_url,
             temperature=temperature,
+            **extras,
         )
 
     def backend_for(self, task: LLMTask) -> ChatBackend:

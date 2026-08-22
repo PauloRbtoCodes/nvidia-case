@@ -28,7 +28,19 @@ class Settings(BaseSettings):
     gastar o modelo grande em planejamento de query desperdiça o orçamento das
     tarefas que realmente precisam de raciocínio."""
 
-    nim_embed_model: str = "nvidia/nv-embedqa-e5-v5"
+    nim_embed_model: str = "nvidia/nemotron-3-embed-1b"
+
+    nim_disable_thinking: bool = True
+    """Desliga o raciocinio explicito dos modelos Nemotron.
+
+    Verificado contra a API real em 2026-09-09: sem isto o `nemotron-3.5-lightning`
+    despeja o proprio raciocinio dentro de `content` — nao num campo separado — e
+    toda saida estruturada falha na validacao. Cada falha custa uma chamada da
+    cota, entao o desperdicio e duplo: gasta e nao entrega.
+
+    `extra_body` nao funciona: o wrapper do LangChain o move para `model_kwargs` e
+    a API devolve 400. O que passa e `chat_template_kwargs` como kwarg direto.
+    """
 
     # Reranking e busca
     cohere_api_key: str = Field(default="")

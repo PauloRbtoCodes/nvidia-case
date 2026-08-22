@@ -32,6 +32,7 @@ log = structlog.get_logger(__name__)
 #: Dimensões conhecidas. Criar a coleção do Qdrant com a dimensão errada só
 #: falha na primeira busca, bem depois da ingestão inteira ter sido paga.
 EMBEDDING_DIMENSIONS: dict[str, int] = {
+    "nvidia/nemotron-3-embed-1b": 2048,
     "nvidia/nv-embedqa-e5-v5": 1024,
     "nvidia/nv-embed-v1": 4096,
     "nvidia/llama-3.2-nv-embedqa-1b-v2": 2048,
