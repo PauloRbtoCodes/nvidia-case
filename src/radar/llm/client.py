@@ -207,6 +207,7 @@ class NIMClient:
             api_key=self.settings.nvidia_api_key,
             base_url=self.settings.nim_base_url,
             temperature=temperature,
+            max_tokens=self.settings.nim_max_tokens,
             **extras,
         )
 

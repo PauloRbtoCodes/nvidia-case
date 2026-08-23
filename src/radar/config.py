@@ -30,6 +30,19 @@ class Settings(BaseSettings):
 
     nim_embed_model: str = "nvidia/nemotron-3-embed-1b"
 
+    nim_max_tokens: int = 8192
+    """Teto de tokens de saida por chamada.
+
+    O padrao do wrapper do LangChain e 1024, e isso e pouco demais para este
+    projeto: verificado contra a API real em 2026-09-09, o JSON do extractor era
+    cortado no meio ("EOF while parsing a list at line 44") e duas de tres
+    empresas morriam ali. O modo de falha e traicoeiro porque parece erro de
+    schema — o modelo obedeceu o formato, so nao teve espaco para terminar.
+
+    Cada retry de validacao gasta uma chamada da cota, entao um teto curto
+    desperdicia em dobro: gasta e nao entrega.
+    """
+
     nim_disable_thinking: bool = True
     """Desliga o raciocinio explicito dos modelos Nemotron.
 
