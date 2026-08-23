@@ -77,16 +77,30 @@ class CachedCompletion:
         )
 
 
-def fingerprint(model: str, temperature: float, messages: list[tuple[str, str]]) -> str:
-    """Identidade da chamada: modelo, temperatura e conteúdo das mensagens.
+def fingerprint(
+    model: str,
+    temperature: float,
+    messages: list[tuple[str, str]],
+    *,
+    params: dict[str, Any] | None = None,
+) -> str:
+    """Identidade da chamada: modelo, parâmetros de geração e mensagens.
 
     O papel de cada mensagem entra no hash porque a mesma frase como `system` ou
     como `human` não é a mesma chamada — e o retry de validação reenvia a
     conversa acrescida da resposta inválida, que precisa ser uma chave distinta.
+
+    `params` entra por causa de um bug real, custo de uma execução inteira: o
+    `max_tokens` estava em 1024 e truncava o JSON do extractor; a resposta
+    truncada foi cacheada; ao subir o teto para 8192, o cache continuou servindo
+    a resposta cortada, porque nada em volta do conteúdo da mensagem tinha
+    mudado. **Parâmetro que altera a saída é parte da identidade da chamada.**
     """
     h = hashlib.sha256()
     h.update(model.encode())
     h.update(f"|{temperature:.4f}|".encode())
+    for chave in sorted(params or {}):
+        h.update(f"{chave}={params[chave]!r};".encode())
     for papel, conteudo in messages:
         h.update(papel.encode())
         h.update(b"\x00")

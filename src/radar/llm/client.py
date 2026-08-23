@@ -247,7 +247,15 @@ class NIMClient:
 
         chave: str | None = None
         if self.cache is not None:
-            chave = fingerprint(model, temperature, self._as_pairs(messages))
+            chave = fingerprint(
+                model,
+                temperature,
+                self._as_pairs(messages),
+                params={
+                    "max_tokens": self.settings.nim_max_tokens,
+                    "thinking": not self.settings.nim_disable_thinking,
+                },
+            )
             entrada = self.cache.get(chave)
             if entrada is not None:
                 self.budget.record_cache_hit()
