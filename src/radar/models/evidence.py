@@ -91,10 +91,23 @@ class Evidence(BaseModel):
             return base * 0.65
         return base * 0.40
 
-    @field_validator("excerpt")
+    @field_validator("excerpt", "context")
     @classmethod
-    def _strip_excerpt(cls, v: str) -> str:
-        return " ".join(v.split())
+    def _limpa_texto(cls, v: str | None) -> str | None:
+        """Normaliza espaços e remove caracteres de controle.
+
+        O NUL (0x00) é o que motivou isto, e o custo foi um lote inteiro: HTML
+        raspado de site real trouxe 0x00 no texto, o Postgres recusa NUL em campo
+        text, e a gravação da empresa falhou **depois** de todo o diagnóstico ter
+        sido pago em cota. Sanitizar no contrato, e não no repositório, garante
+        que nenhuma outra porta de escrita repita o erro.
+
+        Remove a faixa de controle C0 exceto o que vira espaço no `split()`.
+        """
+        if v is None:
+            return None
+        sem_controle = "".join(c for c in v if c == "\n" or c == "\t" or ord(c) >= 32)
+        return " ".join(sem_controle.split())
 
 
 class EvidenceBackedField[T](BaseModel):
