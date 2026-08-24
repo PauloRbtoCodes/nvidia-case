@@ -77,12 +77,25 @@ class CohereRerankBackend:
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, min=1, max=10),
            reraise=True)
     def rerank(self, query: str, documents: Sequence[str], top_n: int) -> list[tuple[int, float]]:
-        response = self._cohere().rerank(
-            model=self.model,
-            query=query,
-            documents=list(documents),
-            top_n=top_n,
-        )
+        try:
+            response = self._cohere().rerank(
+                model=self.model,
+                query=query,
+                documents=list(documents),
+                top_n=top_n,
+            )
+        except Exception as exc:  # noqa: BLE001 - o SDK tem hierarquia propria
+            # Toda falha do SDK vira RerankUnavailableError, que e o unico tipo
+            # que o no do grafo sabe degradar para a ordem do RRF.
+            #
+            # Verificado contra a API real: uma chave invalida levanta
+            # `UnauthorizedError`, que escapava deste ponto e derrubava o no
+            # inteiro — a recomendacao saia bloqueada por falta de KB, quando o
+            # comportamento documentado e manter a ordem do RRF e registrar a
+            # degradacao. Erro de credencial nao pode custar o diagnostico.
+            raise RerankUnavailableError(
+                f"Rerank falhou ({type(exc).__name__}): {str(exc)[:200]}"
+            ) from exc
         return [(result.index, float(result.relevance_score)) for result in response.results]
 
 
