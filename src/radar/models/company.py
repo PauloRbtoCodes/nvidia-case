@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date
 from enum import StrEnum
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, field_validator
 
 from radar.models.evidence import Evidence, EvidenceBackedField
 
@@ -129,6 +129,27 @@ class CompanyProfile(BaseModel):
     # Procedência da coleta
     source_urls: list[HttpUrl] = Field(default_factory=list)
     all_evidences: list[Evidence] = Field(default_factory=list)
+
+    @field_validator(
+        "tech_signals",
+        "founders",
+        "funding_rounds",
+        "open_engineering_roles",
+        "source_urls",
+        "all_evidences",
+        mode="before",
+    )
+    @classmethod
+    def _nulo_vira_lista_vazia(cls, v: object) -> object:
+        """`null` do LLM vira lista vazia.
+
+        Verificado contra a API real: o modelo devolve `"tech_signals": null` em
+        vez de `[]` quando nao encontra nada, e a validacao quebrava depois do
+        extractor ja ter sido pago. Semanticamente os dois dizem a mesma coisa —
+        nao ha sinal — e recusar o `null` so transfere para o prompt uma
+        exigencia que o contrato resolve de uma vez para todas as chamadas.
+        """
+        return [] if v is None else v
 
     @property
     def has_ml_hiring_signal(self) -> bool:
