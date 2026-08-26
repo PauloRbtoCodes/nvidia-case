@@ -33,12 +33,33 @@ MAX_DOC_CHARS = 12_000
 MAX_DOCS_IN_PROMPT = 12
 
 
+#: Excecoes que so acontecem por erro de programacao. Nenhuma delas descreve o
+#: mundo externo se comportando mal — todas descrevem este codigo escrito errado.
+ERROS_DE_PROGRAMACAO: tuple[type[BaseException], ...] = (
+    TypeError,
+    AttributeError,
+    NameError,
+    ImportError,
+    IndexError,
+    UnboundLocalError,
+    NotImplementedError,
+)
+
+
+def classificar(exc: BaseException | str) -> str:
+    """`bug` para erro de programacao, `mundo` para o resto."""
+    if isinstance(exc, str):
+        return "mundo"
+    return "bug" if isinstance(exc, ERROS_DE_PROGRAMACAO) else "mundo"
+
+
 def falha(
     node: str,
     exc: BaseException | str,
     *,
     company: str | None = None,
     recoverable: bool = False,
+    kind: str | None = None,
 ) -> NodeFailure:
     """Constrói a falha que o nó devolve no estado."""
     return NodeFailure(
@@ -46,6 +67,7 @@ def falha(
         company=company,
         error=str(exc)[:500],
         recoverable=recoverable,
+        kind=kind or classificar(exc),
     )
 
 
@@ -59,6 +81,12 @@ def node_guard[S: dict[str, Any]](
     Deliberadamente captura `Exception` inteira: o nó lida com HTML de terceiros,
     JSON de LLM e rede, e a lista de exceções possíveis não é enumerável. O que
     importa é que o nome do nó e a empresa cheguem ao relatório final.
+
+    **Mas nem toda exceção é o mundo falhando.** `TypeError` e `AttributeError`
+    são este código escrito errado, e engolir os dois com a mesma cara faz um bug
+    sair no relatório como "falha recuperável" — o lote termina em "sucesso
+    parcial" e ninguém procura a causa aqui dentro. Por isso a falha carrega
+    `kind`, e só `bug` sobe como `log.error` com traceback.
     """
 
     def decorator(
@@ -70,8 +98,21 @@ def node_guard[S: dict[str, Any]](
             try:
                 return await fn(state)
             except Exception as exc:  # noqa: BLE001 - ver docstring
-                log.warning("no_falhou", node=name, empresa=empresa, erro=str(exc)[:300])
-                return {"failures": [falha(name, exc, company=empresa)]}
+                tipo = classificar(exc)
+                # `bug` sobe como error e com o traceback: erro de programacao
+                # escondido atras de "falha recuperavel" e como o lote termina em
+                # "sucesso parcial" sem ninguem procurar a causa no proprio codigo.
+                registrar = log.error if tipo == "bug" else log.warning
+                registrar(
+                    "no_falhou",
+                    node=name,
+                    empresa=empresa,
+                    kind=tipo,
+                    excecao=type(exc).__name__,
+                    erro=str(exc)[:300],
+                    exc_info=tipo == "bug",
+                )
+                return {"failures": [falha(name, exc, company=empresa, kind=tipo)]}
 
         return wrapper
 

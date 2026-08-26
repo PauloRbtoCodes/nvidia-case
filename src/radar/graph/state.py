@@ -48,6 +48,19 @@ class NodeFailure(TypedDict):
     company: str | None
     error: str
     recoverable: bool
+    kind: str
+    """`mundo` ou `bug`.
+
+    O grafo trata falha como dado justamente porque o mundo externo e hostil —
+    site atras de Cloudflare, JSON malformado do LLM, 429 da API. Mas o mesmo
+    `except Exception` engolia `TypeError` e `AttributeError`, e um bug de
+    programacao saia no relatorio com a mesma cara de "o mundo falhou": o lote
+    terminava com "sucesso parcial" e ninguem procurava a causa no proprio codigo.
+
+    A distincao nao muda o fluxo — o no continua devolvendo estado incompleto e o
+    roteador continua saindo para END. Muda quem le o relatorio: `bug` e para
+    corrigir aqui, `mundo` e para tolerar.
+    """
 
 
 class CompanyState(TypedDict, total=False):

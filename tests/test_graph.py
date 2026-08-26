@@ -882,3 +882,30 @@ def test_provider_identificado_pelo_nome_no_texto():
         ),
     )
     assert inferir_chave_provider(perfil) == "openai_gpt_frontier"
+
+
+# ------------------------------------- bug de programacao vs mundo hostil
+
+
+def test_erro_de_programacao_e_marcado_como_bug():
+    """`except Exception` engolia TypeError com a mesma cara de "site fora do ar".
+
+    O lote terminava em "sucesso parcial" e ninguém procurava a causa no próprio
+    código — que é o pior desfecho possível para um bug.
+    """
+    from radar.graph.nodes.base import classificar, falha
+
+    for exc in (TypeError("x"), AttributeError("y"), NameError("z"), IndexError("i")):
+        assert classificar(exc) == "bug", type(exc).__name__
+        assert falha("no", exc)["kind"] == "bug"
+
+
+def test_falha_do_mundo_externo_continua_sendo_mundo():
+    from radar.graph.nodes.base import classificar, falha
+
+    for exc in (TimeoutError("rede"), ValueError("json malformado"), ConnectionError("dns")):
+        assert classificar(exc) == "mundo", type(exc).__name__
+        assert falha("no", exc)["kind"] == "mundo"
+
+    # Falha construída a partir de string (nó que reporta sem exceção) é mundo.
+    assert falha("no", "robots.txt proibiu")["kind"] == "mundo"
