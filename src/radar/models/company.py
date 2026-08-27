@@ -130,6 +130,30 @@ class CompanyProfile(BaseModel):
     source_urls: list[HttpUrl] = Field(default_factory=list)
     all_evidences: list[Evidence] = Field(default_factory=list)
 
+    @field_validator("stage", mode="before")
+    @classmethod
+    def _estagio_desconhecido_em_vez_de_erro(cls, v: object) -> object:
+        """Valor de enum que o LLM inventou vira `desconhecido`.
+
+        Verificado contra a API real: o modelo devolveu um `stage` fora da lista
+        e a validacao derrubou a empresa inteira **depois** de o extractor ter
+        sido pago em cota. O enum ja tem o valor que descreve exatamente esse
+        caso — nao sabemos o estagio — e recusar o perfil inteiro por causa de um
+        campo secundario troca um diagnostico util por nenhum.
+
+        A escolha nao vale para todo campo: `AIMaturity` invalido continua sendo
+        erro, porque a classificacao **e** o resultado. Aqui o estagio so pesa em
+        `capacity_to_act`, e `desconhecido` ja tem peso proprio em weights.yaml.
+        """
+        if v is None:
+            return Stage.DESCONHECIDO
+        if isinstance(v, Stage):
+            return v
+        try:
+            return Stage(str(v).strip().lower())
+        except ValueError:
+            return Stage.DESCONHECIDO
+
     @field_validator(
         "tech_signals",
         "founders",
