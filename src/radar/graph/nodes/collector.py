@@ -29,6 +29,7 @@ from radar.scraping.extract import (
     extract_job_titles,
     extract_page,
     extract_signal_links,
+    parece_veiculo_de_midia,
 )
 from radar.scraping.search import domain_of
 
@@ -86,11 +87,19 @@ async def _coletar(deps: NodeDeps, state: CompanyState, tentativa: int) -> dict[
     paginas: list[dict[str, Any]] = []
     vagas: list[str] = []
     seguir: list[str] = []
+    veiculo_de_midia = False
 
     for resultado in await deps.fetcher.fetch_many(alvos):
         if not resultado.ok:
             continue
         base = resultado.final_url or resultado.url
+
+        # O porteiro da descoberta só vê domínio, URL e título — e um portal
+        # setorial ("Saúde Business") não é denunciado por nenhum dos três. Aqui
+        # a home já está em memória, e a forma dela denuncia: veículo linka
+        # dezenas de artigos, empresa linka produto, preço e contato.
+        if tentativa == 0 and not veiculo_de_midia:
+            veiculo_de_midia = parece_veiculo_de_midia(resultado.html, base)
         pagina = extract_page(base, resultado.html, company_domain=dominio)
         if not pagina.is_empty:
             paginas.append(page_to_dict(pagina))
@@ -101,6 +110,26 @@ async def _coletar(deps: NodeDeps, state: CompanyState, tentativa: int) -> dict[
         if tentativa == 0:
             seguir.extend(extract_career_links(resultado.html, base))
             seguir.extend(extract_signal_links(resultado.html, base, same_domain_only=True))
+
+    if veiculo_de_midia:
+        # Interrompe antes da segunda onda e antes do extractor: seguir adiante
+        # gastaria uma cadeia inteira de LLM para diagnosticar um portal como se
+        # fosse startup. A falha e' do mundo, nao um bug — a busca trouxe a
+        # coisa errada, e o relatorio precisa dizer isso.
+        nome = state.get("company_name")
+        log.info("veiculo_de_midia_descartado", empresa=nome, urls=alvos[:3])
+        return {
+            "raw_pages": [],
+            "failures": [
+                falha(
+                    "collector",
+                    "Página tem forma de veículo de mídia, não de empresa: densidade "
+                    "de links de artigo acima do limiar.",
+                    company=nome,
+                    recoverable=False,
+                )
+            ],
+        }
 
     # Segunda onda: só na primeira tentativa, e só o que ainda não vimos.
     vistas = ja_coletadas | {p["url"] for p in paginas} | set(alvos)

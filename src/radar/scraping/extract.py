@@ -610,3 +610,65 @@ def extract_tech_mentions(text: str, vocabulary: tuple[str, ...] = TECH_VOCABULA
         if re.search(rf"(?<![\w-]){re.escape(term)}(?![\w-])", lowered):
             found.append(term)
     return found
+
+# --------------------------------------------------------------------------- #
+# Veículo de mídia versus empresa
+# --------------------------------------------------------------------------- #
+#: Marcas de caminho de artigo. Um veículo publica dezenas por semana e linka
+#: todas na home; uma empresa linka produto, preço e contato.
+_MARCAS_DE_ARTIGO: tuple[str, ...] = (
+    "/noticia",
+    "/artigo",
+    "/materia",
+    "/reportagem",
+    "/blog/",
+    "/post/",
+    "/coluna",
+    "/entrevista",
+    "/edicao",
+    "/categoria",
+    "/tag/",
+    "/author/",
+    "/autor/",
+)
+
+_DATA_NO_CAMINHO = re.compile(r"/(?:19|20)\d{2}/(?:0[1-9]|1[0-2])/")
+
+#: Links de artigo na home a partir dos quais a página deixa de ser plausível
+#: como site de empresa. Calibrado alto de propósito: uma startup com blog ativo
+#: pode ter alguns, e recusar empresa de verdade custa mais que deixar passar um
+#: portal — o extractor ainda tem chance de corrigir.
+LIMIAR_LINKS_DE_ARTIGO = 12
+
+
+def conta_links_de_artigo(html: str, base_url: str) -> int:
+    """Links internos com forma de artigo na página."""
+    if not html:
+        return 0
+    base_host = urlsplit(base_url).netloc.lower().removeprefix("www.")
+    vistos: set[str] = set()
+    for href in re.findall(r'href=["\']([^"\']+)["\']', html, flags=re.IGNORECASE):
+        alvo = urljoin(base_url, href)
+        partes = urlsplit(alvo)
+        host = partes.netloc.lower().removeprefix("www.")
+        if host and host != base_host:
+            continue
+        caminho = partes.path.lower()
+        if any(m in caminho for m in _MARCAS_DE_ARTIGO) or _DATA_NO_CAMINHO.search(caminho):
+            vistos.add(caminho)
+    return len(vistos)
+
+
+def parece_veiculo_de_midia(html: str, base_url: str) -> bool:
+    """Distingue portal de conteúdo de site de empresa pela forma da home.
+
+    Motivada por um falso positivo real: "Saúde Business" — um portal de mídia do
+    setor — passou pelo porteiro de descoberta, que só olha domínio, URL e
+    título, e nenhum dos três a denuncia. O sinal que a denuncia está no HTML:
+    **um veículo linka dezenas de artigos na própria home; uma empresa linka
+    produto, preço e contato.**
+
+    Determinístico e sem custo de rede ou de cota: a home já foi baixada, e a
+    contagem roda sobre o HTML que já está em memória.
+    """
+    return conta_links_de_artigo(html, base_url) >= LIMIAR_LINKS_DE_ARTIGO

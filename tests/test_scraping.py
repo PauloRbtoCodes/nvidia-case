@@ -726,3 +726,44 @@ def test_dedupe_por_dominio_pode_manter_mais_de_um():
     mantidos = dedupe_by_domain(candidatos, per_domain=2)
 
     assert [c.url for c in mantidos] == ["https://alfa.com.br/a", "https://alfa.com.br/b"]
+
+
+# --------------------------------------- veiculo de midia versus empresa
+
+
+def test_portal_de_midia_e_reconhecido_pela_densidade_de_artigos():
+    """Motivado por um falso positivo real: "Saúde Business".
+
+    O porteiro da descoberta só vê domínio, URL e título, e um portal setorial
+    não é denunciado por nenhum dos três. A forma da home denuncia.
+    """
+    from radar.scraping.extract import parece_veiculo_de_midia
+
+    portal = "".join(
+        f'<a href="/noticias/2026/09/materia-{i}">titulo {i}</a>' for i in range(20)
+    )
+    assert parece_veiculo_de_midia(portal, "https://saudebusiness.com.br/")
+
+
+def test_site_de_empresa_com_blog_ativo_nao_e_falso_positivo():
+    """Limiar calibrado alto: recusar empresa de verdade custa mais que deixar
+    passar um portal, porque o extractor ainda tem chance de corrigir."""
+    from radar.scraping.extract import parece_veiculo_de_midia
+
+    empresa = (
+        '<a href="/produto">Produto</a><a href="/precos">Preços</a>'
+        '<a href="/contato">Contato</a><a href="/carreiras">Vagas</a>'
+        + "".join(f'<a href="/blog/post-{i}">post {i}</a>' for i in range(5))
+    )
+    assert not parece_veiculo_de_midia(empresa, "https://startup.com.br/")
+
+
+def test_links_externos_nao_contam():
+    """Empresa que linka notícias sobre si mesma não vira portal por isso."""
+    from radar.scraping.extract import conta_links_de_artigo
+
+    html = "".join(
+        f'<a href="https://exame.com/noticias/2026/09/sobre-nos-{i}">saiu na imprensa</a>'
+        for i in range(20)
+    )
+    assert conta_links_de_artigo(html, "https://startup.com.br/") == 0
