@@ -36,3 +36,8 @@ web/.turbo/
 # Playwright
 playwright-report/
 test-results/
+
+# Frontend
+web/node_modules/
+web/.next/
+web/next-env.d.ts
