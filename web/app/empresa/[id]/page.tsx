@@ -3,6 +3,7 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { AXIS_LABEL, api, type BriefingOut, type CompanyDetail } from "@/lib/api";
+import { IconSeta } from "@/components/Icons";
 import { Axes } from "@/components/Axes";
 import { BucketChip } from "@/components/Chip";
 
@@ -42,8 +43,12 @@ export default function EmpresaPage({ params }: { params: Promise<{ id: string }
 
   return (
     <div className="stack">
-      <p style={{ fontSize: 14 }}>
-        <Link href="/fila" style={{ color: "var(--ink-muted)" }}>← Fila</Link>
+      <p style={{ fontSize: 15 }}>
+        <Link href="/fila" style={{ color: "var(--ink-muted)", display: "inline-flex",
+          alignItems: "center", gap: 6, fontWeight: 500 }}>
+          <span style={{ transform: "scaleX(-1)", display: "inline-flex" }}><IconSeta /></span>
+          Voltar para a fila
+        </Link>
       </p>
 
       <div className="stack-sm">
@@ -89,7 +94,7 @@ export default function EmpresaPage({ params }: { params: Promise<{ id: string }
               </span>
               {c.priority ? (
                 <span style={{ marginLeft: "auto", alignSelf: "center" }}>
-                  <BucketChip bucket={c.priority.bucket} />
+                  <BucketChip bucket={c.priority.bucket} big />
                 </span>
               ) : null}
             </div>
@@ -100,7 +105,7 @@ export default function EmpresaPage({ params }: { params: Promise<{ id: string }
           </section>
 
           <section className="card stack-sm">
-            <h2>Defensibility Radar</h2>
+            <div className="section-head"><span className="section-num">01</span><h2>Defensibility Radar</h2></div>
             <p style={{ fontSize: 13.5, color: "var(--ink-muted)", maxWidth: "64ch" }}>
               Score e confiança são números independentes. Eixo com confiança abaixo de
               0,35 aparece como <em>evidência insuficiente</em> — nunca como nota baixa.
@@ -114,15 +119,11 @@ export default function EmpresaPage({ params }: { params: Promise<{ id: string }
 
       {c.priority ? (
         <section className="card stack-sm">
-          <h2>Prioridade</h2>
-          <div className="table-wrap">
-            <table>
-              <tbody>
-                <tr><th scope="row">Urgência</th><td className="num">{c.priority.urgency.toFixed(1)}</td></tr>
-                <tr><th scope="row">Capacidade de agir</th><td className="num">{(c.priority.capacity_to_act ?? 0).toFixed(2)}</td></tr>
-              </tbody>
-            </table>
-          </div>
+          <div className="section-head"><span className="section-num">02</span><h2>Prioridade</h2></div>
+          <dl className="kv">
+            <dt>Urgência</dt><dd>{c.priority.urgency.toFixed(1)} / 100</dd>
+            <dt>Capacidade de agir</dt><dd>{(c.priority.capacity_to_act ?? 0).toFixed(2)}</dd>
+          </dl>
           {c.priority.capacity_rationale ? (
             <p style={{ fontSize: 13.5, color: "var(--ink-muted)" }}>{c.priority.capacity_rationale}</p>
           ) : null}
@@ -136,7 +137,7 @@ export default function EmpresaPage({ params }: { params: Promise<{ id: string }
 
       {c.recommendations && c.recommendations.length > 0 ? (
         <section className="card stack-sm">
-          <h2>Recomendações NVIDIA</h2>
+          <div className="section-head"><span className="section-num">03</span><h2>Recomendações NVIDIA</h2></div>
           <p style={{ fontSize: 13.5, color: "var(--ink-muted)", maxWidth: "64ch" }}>
             A tecnologia sai do eixo mais fraco, não de uma regra por setor — e nenhuma
             recomendação existe sem citação da base de conhecimento.

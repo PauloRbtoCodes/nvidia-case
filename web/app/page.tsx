@@ -1,168 +1,103 @@
-"use client";
-
-import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { api } from "@/lib/api";
-
-interface Evento {
-  t: string;
-  node: string;
-  msg: string;
-  erro?: boolean;
-}
+import { IconBusca, IconFila, IconSeta } from "@/components/Icons";
 
 /**
- * Tela 1 — busca com progresso ao vivo.
+ * Painel — o destino da logo e a porta de entrada.
  *
- * O POST devolve 202 e um id; o progresso vem por SSE. A ordem importa e é o
- * motivo de `SearchRun.subscribe` entregar histórico antes dos eventos vivos:
- * abrimos o stream **depois** do POST, e sem histórico os eventos emitidos
- * nesse intervalo sumiriam — a tela abriria com o progresso pela metade.
+ * Existe porque clicar na marca disparava a tela de busca, e "voltar ao início"
+ * não deveria levar a uma tela de ação. Além disso é onde o sistema se explica:
+ * quem abre pela primeira vez precisa saber o que a fila significa antes de
+ * confiar na ordem dela.
  */
-export default function BuscaPage() {
-  const [query, setQuery] = useState("startups brasileiras de IA para saúde");
-  const [maxCompanies, setMax] = useState(3);
-  const [runId, setRunId] = useState<string | null>(null);
-  const [status, setStatus] = useState<string>("");
-  const [eventos, setEventos] = useState<Evento[]>([]);
-  const [erro, setErro] = useState<string | null>(null);
-  const [rodando, setRodando] = useState(false);
-  const esRef = useRef<EventSource | null>(null);
-  const fimRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => () => esRef.current?.close(), []);
-  useEffect(() => { fimRef.current?.scrollIntoView({ block: "nearest" }); }, [eventos.length]);
-
-  const abrirStream = useCallback((id: string) => {
-    esRef.current?.close();
-    const es = new EventSource(`/api/searches/${id}/stream`);
-    esRef.current = es;
-
-    es.onmessage = (ev) => {
-      try {
-        const d = JSON.parse(ev.data);
-        const node = String(d.node ?? d.event ?? d.type ?? "evento");
-        const msg = String(d.message ?? d.detail ?? d.company ?? JSON.stringify(d));
-        const erroEvento = /fail|erro|error/i.test(node) || d.level === "error" || d.kind === "bug";
-        setEventos((prev) => [
-          ...prev,
-          { t: new Date().toLocaleTimeString("pt-BR", { hour12: false }), node, msg, erro: erroEvento },
-        ]);
-        if (d.status) setStatus(String(d.status));
-        if (d.status === "concluida" || d.status === "completed" || d.status === "falhou") {
-          setRodando(false);
-          es.close();
-        }
-      } catch {
-        /* keep-alive do SSE não é JSON — ignorar é o comportamento correto */
-      }
-    };
-
-    es.onerror = () => {
-      // O EventSource reconecta sozinho; só encerramos quando a execução acabou.
-      if (!rodando) es.close();
-    };
-  }, [rodando]);
-
-  async function iniciar(e: React.FormEvent) {
-    e.preventDefault();
-    setErro(null);
-    setEventos([]);
-    setRodando(true);
-    setStatus("iniciando");
-    try {
-      const run = await api.buscar(query, maxCompanies);
-      setRunId(run.id);
-      setStatus(run.status ?? "em_execucao");
-      abrirStream(run.id);
-    } catch (err) {
-      setErro(err instanceof Error ? err.message : String(err));
-      setRodando(false);
-    }
-  }
-
+export default function PainelPage() {
   return (
     <div className="stack">
-      <div className="stack-sm">
-        <span className="label">Nova varredura</span>
-        <h1>Quem procurar nesta semana</h1>
-        <p style={{ color: "var(--ink-muted)", maxWidth: "62ch" }}>
-          O radar varre fontes públicas, mede o quanto cada startup está exposta à
-          comoditização pelos grandes labs e ordena a fila por{" "}
-          <strong style={{ color: "var(--ink)" }}>risco × capacidade de agir</strong>.
+      <section className="hero">
+        <span className="label">Startups &amp; VCs · Inception Brasil</span>
+        <h1>Quais startups brasileiras de IA correm risco de virar feature de keynote</h1>
+        <p>
+          O radar varre fontes públicas, mede o quanto cada startup está protegida
+          contra a comoditização pelos grandes labs e transforma esse diagnóstico numa
+          conversa — com a tecnologia NVIDIA que endereça exatamente o ponto fraco dela.
         </p>
+      </section>
+
+      <div className="cards2">
+        <Link href="/busca" className="action-card">
+          <span className="ac-icon"><IconBusca /></span>
+          <h3>Buscar startups</h3>
+          <p>
+            Descreva um setor ou perfil. O radar encontra as empresas, diagnostica cada
+            uma e mostra o progresso ao vivo.
+          </p>
+          <span className="ac-go">Iniciar uma varredura →</span>
+        </Link>
+
+        <Link href="/fila" className="action-card">
+          <span className="ac-icon"><IconFila /></span>
+          <h3>Fila de prioridade</h3>
+          <p>
+            As empresas já diagnosticadas, ordenadas por quem merece a próxima
+            conversa — e com o motivo ao lado.
+          </p>
+          <span className="ac-go">Ver a quem falar →</span>
+        </Link>
       </div>
 
-      <form className="card search-form" onSubmit={iniciar}>
-        <div className="field">
-          <label htmlFor="q">Consulta</label>
-          <input
-            id="q"
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="startups brasileiras de IA para saúde"
-            required
-          />
+      <section className="card stack-sm">
+        <div className="section-head">
+          <h2>Como o radar decide</h2>
         </div>
-        <div className="field narrow">
-          <label htmlFor="n">Empresas</label>
-          <input
-            id="n"
-            type="number"
-            min={1}
-            max={12}
-            value={maxCompanies}
-            onChange={(e) => setMax(Number(e.target.value))}
-          />
-        </div>
-        <button className="btn" type="submit" disabled={rodando}>
-          {rodando ? "Executando…" : "Iniciar varredura"}
-        </button>
-      </form>
-
-      {erro ? (
-        <p className="alert" role="alert">
-          <strong>Não foi possível iniciar.</strong> {erro}
-          <br />
-          Confira se a API está no ar em <code className="mono">localhost:8000</code> (
-          <code className="mono">make api</code>).
+        <p style={{ color: "var(--ink-muted)", maxWidth: "68ch" }}>
+          Cada startup recebe um <strong style={{ color: "var(--ink)" }}>score de
+          defensibilidade</strong> de 0 a 100 em quatro eixos. O complemento é o risco de
+          comoditização: quanto dela um lançamento da OpenAI ou do Google conseguiria
+          substituir.
         </p>
-      ) : null}
-
-      {runId ? (
-        <section className="card stack-sm" aria-live="polite">
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-            <h2>Progresso</h2>
-            <span className="mono" style={{ fontSize: 13, color: "var(--ink-muted)" }}>
-              {status} · {eventos.length} evento{eventos.length === 1 ? "" : "s"}
-            </span>
-          </div>
-          {eventos.length === 0 ? (
-            <p style={{ color: "var(--ink-muted)", fontSize: 14 }}>
-              Aguardando o primeiro evento do grafo…
-            </p>
-          ) : (
-            <div className="events">
-              {eventos.map((ev, i) => (
-                <div className={`event${ev.erro ? " is-error" : ""}`} key={i}>
-                  <time>{ev.t}</time>
-                  <span className="node">{ev.node}</span>
-                  <p>{ev.msg}</p>
-                </div>
-              ))}
-              <div ref={fimRef} />
+        <div className="steps" style={{ marginTop: 6 }}>
+          {[
+            ["Dados proprietários", "30%", "Tem dado que o lab não consegue comprar?"],
+            ["Profundidade de workflow", "25%", "Chat genérico, ou escreve dentro do ERP do cliente?"],
+            ["Domínio da stack", "25%", "Controla custo e latência, ou repassa API de terceiro?"],
+            ["Distribuição", "20%", "Canal que um anúncio de feature não replica?"],
+          ].map(([nome, peso, pergunta]) => (
+            <div className="step" key={nome}>
+              <span className="step-n">{peso}</span>
+              <b>{nome}</b>
+              <p>{pergunta}</p>
             </div>
-          )}
-          {!rodando && eventos.length > 0 ? (
-            <p style={{ fontSize: 14 }}>
-              <Link href="/fila" style={{ color: "var(--accent)", fontWeight: 600 }}>
-                Ver a fila de prioridade →
-              </Link>
+          ))}
+        </div>
+      </section>
+
+      <section className="card stack-sm">
+        <div className="section-head"><h2>Duas regras que o sistema não quebra</h2></div>
+        <div className="cards2">
+          <div className="callout">
+            <span className="label">Score ≠ confiança</span>
+            <p>
+              Startup discreta produz pouca evidência. Quando não encontramos sinal, o eixo
+              aparece como <em>evidência insuficiente</em> — nunca como nota baixa. Confundir
+              as duas coisas seria injustiça com aparência de rigor.
             </p>
-          ) : null}
-        </section>
-      ) : null}
+          </div>
+          <div className="callout">
+            <span className="label">Nenhuma afirmação sem fonte</span>
+            <p>
+              Toda informação sobre uma empresa vem com link e o trecho literal que a
+              sustenta, clicável na tela do perfil. Se não houver fonte, o sistema bloqueia
+              em vez de escrever algo plausível.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <p style={{ fontSize: 15 }}>
+        <Link href="/fila" style={{ color: "var(--accent-ink)", fontWeight: 600,
+          display: "inline-flex", alignItems: "center", gap: 8 }}>
+          Ver a fila de prioridade <IconSeta />
+        </Link>
+      </p>
     </div>
   );
 }
