@@ -11,6 +11,7 @@ from radar.graph.nodes.base import falha
 from radar.graph.nodes.briefing import make_write_briefing, render_markdown
 from radar.graph.nodes.classifier import make_classify_company
 from radar.graph.nodes.collector import make_collect_sources
+from radar.graph.nodes.compare import make_compare_scores
 from radar.graph.nodes.deps import NodeDeps, build_deps
 from radar.graph.nodes.discovery import make_discover_companies
 from radar.graph.nodes.extractor import make_extract_profile, podar_nao_literais
@@ -26,6 +27,7 @@ __all__ = [
     "falha",
     "make_classify_company",
     "make_collect_sources",
+    "make_compare_scores",
     "make_discover_companies",
     "make_extract_profile",
     "make_plan_search",

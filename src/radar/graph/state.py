@@ -21,6 +21,7 @@ from radar.models.company import Classification, CompanyProfile
 from radar.models.evidence import Evidence
 from radar.models.recommendation import Briefing, Recommendation, RetrievedChunk
 from radar.models.scoring import DefensibilityScore, PriorityAssessment
+from radar.scoring.delta import ScoreDelta
 
 
 class SearchPlan(TypedDict, total=False):
@@ -105,6 +106,15 @@ class CompanyState(TypedDict, total=False):
 
     defensibility: DefensibilityScore | None
     priority: PriorityAssessment | None
+
+    score_delta: ScoreDelta | None
+    """Diff contra a execução anterior desta empresa, quando há uma.
+
+    Escrito pelo nó `compare` (entre `score` e `rag`). `None` na primeira vez que
+    a empresa é vista, sem banco, ou se a leitura do histórico falhou — nenhum
+    desses casos interrompe o subgrafo. O briefing consome isto para o talk
+    track; a fila da API deriva o seu próprio diff do histórico persistido.
+    """
 
     # Recomendação
     candidate_technologies: list[str]

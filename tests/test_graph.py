@@ -61,6 +61,7 @@ from radar.models.scoring import (
     PriorityAssessment,
     PriorityBucket,
 )
+from radar.scoring.delta import ChangeKind
 from radar.scoring.priority import avaliar_prioridade
 from radar.scoring.product import inferir_categoria_produto, inferir_chave_provider
 from radar.scraping.fetch import FetchResult
@@ -459,12 +460,33 @@ def _settings() -> Settings:
 
 
 @dataclass
+class HistoricoFake:
+    """Dublê de `ScoreHistoryPort`: o "antes" do nó `compare`, sem banco.
+
+    `anterior=None` é a primeira execução da empresa. `erro` simula o banco
+    caindo no meio do lote — o nó tem que registrar a falha e o briefing sair
+    assim mesmo.
+    """
+
+    anterior: DefensibilityScore | None = None
+    erro: Exception | None = None
+    chamadas: list[str] = field(default_factory=list)
+
+    def previous_score(self, company_name: str) -> DefensibilityScore | None:
+        self.chamadas.append(company_name)
+        if self.erro is not None:
+            raise self.erro
+        return self.anterior
+
+
+@dataclass
 class Ambiente:
     deps: NodeDeps
     chat: RoteadorDeChat
     fetcher: FetcherFake
     search: SearchFake
     retriever: RetrieverFake | None
+    historico: HistoricoFake | None = None
     chunks: list[RetrievedChunk] = field(default_factory=list)
 
 
@@ -476,6 +498,7 @@ def montar(
     chunks: Sequence[RetrievedChunk] | None = None,
     candidatos: Sequence[CandidatoFake] | None = None,
     hoje: date | None = None,
+    historico: HistoricoFake | None = None,
 ) -> Ambiente:
     padrao: dict[str, Any] = {
         "search_planner": plano_json(),
@@ -504,9 +527,13 @@ def montar(
         # Sem reranker: a ordem do RRF já vem do dublê e o cross-encoder real
         # exigiria chave da Cohere. O caminho de degradação tem teste próprio.
         reranker=None,
+        score_history=historico,
         clock=lambda: hoje or date(2026, 8, 14),
     )
-    return Ambiente(deps=deps, chat=chat, fetcher=fetcher, search=search, retriever=retriever)
+    return Ambiente(
+        deps=deps, chat=chat, fetcher=fetcher, search=search,
+        retriever=retriever, historico=historico,
+    )
 
 
 async def executar(ambiente: Ambiente, *, query: str = "startups de IA em saude") -> dict[str, Any]:
@@ -571,6 +598,91 @@ async def test_paginas_de_carreira_e_blog_sao_seguidas_a_partir_da_home():
     # Vaga é a fonte mais honesta de stack: o grafo precisa chegar nela sozinho.
     assert CARREIRAS_URL in ambiente.fetcher.pedidos
     assert BLOG_URL in ambiente.fetcher.pedidos
+
+
+# --------------------------------------------------------------------------- #
+# Gatilho temporal: o nó `compare`
+# --------------------------------------------------------------------------- #
+def _score_anterior(*, stack_score: float, stack_conf: float = 0.8) -> DefensibilityScore:
+    """Um score "de semana passada" para a Acme Saude, alinhado ao `eixos_json`.
+
+    Só o eixo de stack varia entre os testes — os outros três repetem os valores
+    da execução atual, então qualquer mudança detectada é a que o teste montou.
+    """
+    return DefensibilityScore(
+        company_name="Acme Saude",
+        weights_version="0.1.0-anterior",
+        axes=[
+            AxisScore(
+                axis=DefensibilityAxis.PROPRIETARY_DATA, score=82.0, confidence=0.8,
+                rationale="igual à execução atual",
+            ),
+            AxisScore(
+                axis=DefensibilityAxis.WORKFLOW_DEPTH, score=75.0, confidence=0.7,
+                rationale="igual à execução atual",
+            ),
+            AxisScore(
+                axis=DefensibilityAxis.STACK_OWNERSHIP, score=stack_score,
+                confidence=stack_conf, rationale="o eixo que este teste move",
+            ),
+            AxisScore(
+                axis=DefensibilityAxis.DISTRIBUTION, score=60.0, confidence=0.2,
+                rationale="igual à execução atual",
+            ),
+        ],
+    )
+
+
+async def test_primeira_execucao_nao_emite_diff_e_o_grafo_segue():
+    historico = HistoricoFake(anterior=None)
+    ambiente = montar(historico=historico)
+    resultado = await executar(ambiente)
+
+    assert len(resultado["briefings"]) == 1
+    assert historico.chamadas == ["Acme Saude"], "o nó compare precisa ter consultado o histórico"
+    assert resultado["company_results"][0].get("score_delta") is None
+    assert not resultado.get("failures")
+
+
+async def test_segunda_execucao_emite_o_diff_da_piora_medida():
+    # Stack caiu de 70 para 25 com a mesma confiança: piora real, não sumiço de sinal.
+    historico = HistoricoFake(anterior=_score_anterior(stack_score=70.0))
+    ambiente = montar(historico=historico)
+    resultado = await executar(ambiente)
+
+    delta = resultado["company_results"][0].get("score_delta")
+    assert delta is not None and delta.has_changes
+    manchete = delta.headline_axis
+    assert manchete is not None
+    assert manchete.axis is DefensibilityAxis.STACK_OWNERSHIP
+    assert manchete.kind is ChangeKind.PIOROU
+    # O diff é um extra: o briefing sai como sempre.
+    assert len(resultado["briefings"]) == 1
+
+
+async def test_ausencia_de_evidencia_nao_vira_piora_no_grafo():
+    # Confiança caiu junto com o score: o invariante do ADR 0002 no eixo do tempo.
+    historico = HistoricoFake(anterior=_score_anterior(stack_score=70.0, stack_conf=0.95))
+    ambiente = montar(historico=historico)
+    resultado = await executar(ambiente)
+
+    delta = resultado["company_results"][0]["score_delta"]
+    stack = next(a for a in delta.axes if a.axis is DefensibilityAxis.STACK_OWNERSHIP)
+    assert stack.kind is ChangeKind.CONFIANCA_CAIU
+    assert stack.kind is not ChangeKind.PIOROU
+
+
+async def test_erro_ao_ler_o_historico_vira_falha_e_nao_derruba_o_briefing():
+    historico = HistoricoFake(erro=RuntimeError("banco fora do ar no meio do lote"))
+    ambiente = montar(historico=historico)
+    resultado = await executar(ambiente)
+
+    assert len(resultado["briefings"]) == 1, "o diff é opcional; o diagnóstico não"
+    falhas = resultado.get("failures") or []
+    compare = next((f for f in falhas if f["node"] == "compare"), None)
+    assert compare is not None
+    assert compare["kind"] == "mundo"
+    assert resultado["company_results"][0].get("score_delta") is None
 
 
 # --------------------------------------------------------------------------- #

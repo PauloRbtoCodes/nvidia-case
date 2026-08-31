@@ -22,12 +22,13 @@ import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
-from typing import Any, TypeVar
+from typing import Any, Protocol, TypeVar
 
 from pydantic import BaseModel
 
 from radar.llm.client import NIMClient
 from radar.llm.model_registry import LLMTask
+from radar.models.scoring import DefensibilityScore
 from radar.rag.hybrid import HybridRetriever
 from radar.rag.rerank import Reranker
 from radar.scoring.weights import ScoringWeights, get_weights
@@ -35,6 +36,31 @@ from radar.scraping.fetch import HttpFetcher
 from radar.scraping.search import TavilySearch
 
 T = TypeVar("T", bound=BaseModel)
+
+
+class ScoreHistoryPort(Protocol):
+    """Leitura do score anterior de uma empresa, para o nó `compare`.
+
+    O grafo não importa `persistence/` — roda contra dublês, sem banco no ar e
+    sem chave de API. Esta porta é o único ponto por onde o histórico entra no
+    subgrafo: em produção, um adaptador sobre o Postgres
+    (`radar.persistence.score_history.DbScoreHistory`); nos testes, um dublê; e
+    `None` quando não há banco, caso em que o nó `compare` simplesmente não
+    emite diff.
+
+    É a inversão de dependência que o `docs/governanca-e-tradeoffs.md` §9 registra
+    como trabalho de baixo custo e alta prioridade, aplicada ao primeiro nó que
+    de fato precisa dela.
+    """
+
+    def previous_score(self, company_name: str) -> DefensibilityScore | None:
+        """O score mais recente já persistido desta empresa, ou `None` na primeira vez.
+
+        Chamado durante o grafo, antes de o score novo ser gravado — a
+        persistência é um sink pós-grafo (`radar.persistence.sink`) —, então o
+        "mais recente" é genuinamente a execução anterior, não a atual.
+        """
+        ...
 
 
 def _hoje() -> date:
@@ -56,6 +82,8 @@ class NodeDeps:
     fetcher: HttpFetcher | None = None
     retriever: HybridRetriever | None = None
     reranker: Reranker | None = None
+    score_history: ScoreHistoryPort | None = None
+    """Histórico de score para o nó `compare`. `None` sem banco — o nó não emite diff."""
     weights: ScoringWeights = field(default_factory=get_weights)
     clock: Callable[[], date] = _hoje
 
@@ -81,6 +109,7 @@ def build_deps(
     with_search: bool = True,
     with_fetcher: bool = True,
     with_retriever: bool = True,
+    with_history: bool = True,
 ) -> NodeDeps:
     """Fábrica padrão de produção.
 
@@ -115,10 +144,20 @@ def build_deps(
         except Exception:  # noqa: BLE001 - Qdrant fora do ar é caso esperado
             retriever = None
 
+    score_history: ScoreHistoryPort | None = None
+    if with_history:
+        # O adaptador não abre conexão na construção: cada consulta abre a sua e
+        # devolve `None` se o banco estiver fora do ar. Importado aqui, e não no
+        # topo, para manter `graph/` sem dependência de import em `persistence/`.
+        from radar.persistence.score_history import DbScoreHistory
+
+        score_history = DbScoreHistory()
+
     return NodeDeps(
         llm=llm or NIMClient(),
         search=search,
         fetcher=HttpFetcher() if with_fetcher else None,
         retriever=retriever,
         reranker=Reranker(),
+        score_history=score_history,
     )

@@ -7,9 +7,14 @@ externo:   plan → discover ──Send(N)──▶ process_company ──▶ co
 
 subgrafo:  collect → extract → validate ─┬─(lacuna e orçamento)──▶ collect
                                          └─▶ classify ─┬─(non_ai)─▶ END
-                                                       └─▶ score → rag
+                                                       └─▶ score → compare → rag
                                                               → recommend → briefing → END
 ```
+
+O nó `compare` (gatilho temporal) fica entre `score` e `rag`: emite o diff
+contra a execução anterior para o briefing consumir, sem tocar em
+`candidate_technologies()`, que já saiu do scorer. Sem histórico com que
+comparar, é um passthrough.
 
 Duas decisões estruturais, ambas sobre isolamento de falha:
 
@@ -36,6 +41,7 @@ from radar.graph.nodes import (
     falha,
     make_classify_company,
     make_collect_sources,
+    make_compare_scores,
     make_discover_companies,
     make_extract_profile,
     make_plan_search,
@@ -89,7 +95,7 @@ def route_after_classify(state: CompanyState) -> str:
 
 
 def route_after_score(state: CompanyState) -> str:
-    return "rag" if state.get("defensibility") is not None else END
+    return "compare" if state.get("defensibility") is not None else END
 
 
 def route_after_rag(state: CompanyState) -> str:
@@ -118,6 +124,7 @@ def build_company_graph(deps: NodeDeps) -> Any:
     grafo.add_node("validate", make_validate_evidence(deps))
     grafo.add_node("classify", make_classify_company(deps))
     grafo.add_node("score", make_score_defensibility(deps))
+    grafo.add_node("compare", make_compare_scores(deps))
     grafo.add_node("rag", make_retrieve_kb(deps))
     grafo.add_node("recommend", make_recommend_technologies(deps))
     grafo.add_node("briefing", make_write_briefing(deps))
@@ -127,7 +134,11 @@ def build_company_graph(deps: NodeDeps) -> Any:
     grafo.add_conditional_edges("extract", route_after_extract, ["validate", END])
     grafo.add_conditional_edges("validate", route_after_validate, ["collect", "classify", END])
     grafo.add_conditional_edges("classify", route_after_classify, ["score", END])
-    grafo.add_conditional_edges("score", route_after_score, ["rag", END])
+    grafo.add_conditional_edges("score", route_after_score, ["compare", END])
+    # `compare` só acrescenta `score_delta` (ou nada) e nunca remove `defensibility`;
+    # o `node_guard` transforma qualquer erro de leitura do histórico em falha
+    # registrada. Não há estado incompleto a rotear — a aresta é incondicional.
+    grafo.add_edge("compare", "rag")
     grafo.add_conditional_edges("rag", route_after_rag, ["recommend", END])
     grafo.add_conditional_edges("recommend", route_after_recommend, ["briefing", END])
     grafo.add_edge("briefing", END)
