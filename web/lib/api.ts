@@ -33,6 +33,40 @@ export const AXIS_LABEL: Record<string, string> = {
 /** Espelha `ACTIONABLE_CONFIDENCE_THRESHOLD` de `models/scoring.py`. */
 export const CONFIANCA_MINIMA = 0.35;
 
+/** O que mudou num eixo entre a última execução e a anterior. */
+export type ChangeKind =
+  | "nova_evidencia"
+  | "melhorou"
+  | "piorou"
+  | "confianca_caiu"
+  | "estavel";
+
+export interface AxisDelta {
+  axis: string;
+  kind: ChangeKind;
+  score_before: number;
+  score_after: number;
+  confidence_before: number;
+  confidence_after: number;
+  score_change: number;
+  is_actionable: boolean;
+  new_evidences?: EvidenceOut[];
+}
+
+/**
+ * O gatilho temporal: o diff entre as duas execuções mais recentes da empresa.
+ * Ausência de evidência nunca vira "piorou" — o backend garante o invariante;
+ * o front só precisa desenhar `headline_axis`.
+ */
+export interface ScoreDelta {
+  company_name: string;
+  weights_version_before: string;
+  weights_version_after: string;
+  axes: AxisDelta[];
+  has_changes: boolean;
+  headline_axis?: AxisDelta | null;
+}
+
 export interface QueueItem {
   company_id: string;
   company_name: string;
@@ -44,6 +78,7 @@ export interface QueueItem {
   sector?: string | null;
   maturity?: string | null;
   recommended_next_step?: string | null;
+  delta?: ScoreDelta | null;
 }
 
 export interface EvidenceOut {
@@ -119,6 +154,7 @@ export interface CompanyDetail {
   } | null;
   recommendations?: Recommendation[];
   has_briefing?: boolean;
+  delta?: ScoreDelta | null;
 }
 
 export interface BriefingOut {

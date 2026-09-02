@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AXIS_LABEL, api, BUCKET_LABEL, BUCKET_VARS, type Bucket, type QueueItem } from "@/lib/api";
 import { BucketChip } from "@/components/Chip";
+import { DeltaTag } from "@/components/Delta";
 import { IconSeta } from "@/components/Icons";
 
 const ORDEM: Bucket[] = ["abordar_agora", "case_potencial", "nutrir", "monitorar"];
@@ -100,6 +101,7 @@ export default function FilaPage() {
                         {it.weakest_axis ? (
                           <span>eixo fraco: {AXIS_LABEL[it.weakest_axis] ?? it.weakest_axis}</span>
                         ) : null}
+                        <DeltaTag delta={it.delta} />
                       </span>
                       {it.recommended_next_step ? (
                         <span className="queue-next">{it.recommended_next_step}</span>

@@ -232,6 +232,18 @@ p  { margin: 0; }
 /* A forma reforça a cor: nenhum bucket depende só do matiz para ser lido. */
 .chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
 
+/* -------------------------------------------------------- gatilho temporal */
+.delta-tag {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 600;
+  padding: 3px 9px; border-radius: 2px; white-space: nowrap;
+  background: var(--delta-wash); color: var(--delta-fg);
+  border: 1px solid color-mix(in srgb, var(--delta-fg) 30%, transparent);
+}
+.delta-list { list-style: none; padding: 0; margin: 4px 0 0; display: flex; flex-direction: column; gap: 16px; }
+.delta-list > li { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.delta-line { font-size: 14.5px; }
+.delta-nums { font-size: 12.5px; color: var(--ink-muted); }
+
 /* ------------------------------------------------------------------ radar */
 .axes { display: flex; flex-direction: column; gap: 18px; }
 .axis-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }

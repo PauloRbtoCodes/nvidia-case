@@ -6,6 +6,7 @@ import { AXIS_LABEL, api, type BriefingOut, type CompanyDetail } from "@/lib/api
 import { IconSeta } from "@/components/Icons";
 import { Axes } from "@/components/Axes";
 import { BucketChip } from "@/components/Chip";
+import { DeltaSection } from "@/components/Delta";
 
 /**
  * Tela 3 — perfil da empresa.
@@ -114,12 +115,14 @@ export default function EmpresaPage({ params }: { params: Promise<{ id: string }
               <Axes axes={d.axes ?? []} weakest={d.weakest_axis} />
             </div>
           </section>
+
+          <DeltaSection delta={c.delta} />
         </>
       )}
 
       {c.priority ? (
         <section className="card stack-sm">
-          <div className="section-head"><span className="section-num">02</span><h2>Prioridade</h2></div>
+          <div className="section-head"><span className="section-num">03</span><h2>Prioridade</h2></div>
           <dl className="kv">
             <dt>Urgência</dt><dd>{c.priority.urgency.toFixed(1)} / 100</dd>
             <dt>Capacidade de agir</dt><dd>{(c.priority.capacity_to_act ?? 0).toFixed(2)}</dd>
@@ -137,7 +140,7 @@ export default function EmpresaPage({ params }: { params: Promise<{ id: string }
 
       {c.recommendations && c.recommendations.length > 0 ? (
         <section className="card stack-sm">
-          <div className="section-head"><span className="section-num">03</span><h2>Recomendações NVIDIA</h2></div>
+          <div className="section-head"><span className="section-num">04</span><h2>Recomendações NVIDIA</h2></div>
           <p style={{ fontSize: 13.5, color: "var(--ink-muted)", maxWidth: "64ch" }}>
             A tecnologia sai do eixo mais fraco, não de uma regra por setor — e nenhuma
             recomendação existe sem citação da base de conhecimento.
