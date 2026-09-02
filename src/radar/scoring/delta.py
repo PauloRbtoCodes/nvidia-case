@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 from radar.models.evidence import Evidence
 from radar.models.scoring import AxisScore, DefensibilityAxis, DefensibilityScore
@@ -74,10 +74,12 @@ class AxisDelta(BaseModel):
     confidence_after: float
     new_evidences: list[Evidence] = Field(default_factory=list)
 
+    @computed_field
     @property
     def score_change(self) -> float:
         return round(self.score_after - self.score_before, 1)
 
+    @computed_field
     @property
     def is_actionable(self) -> bool:
         """O que vale aparecer na fila como "mudou". Estável e ruído não valem."""
@@ -92,10 +94,12 @@ class ScoreDelta(BaseModel):
     weights_version_after: str
     axes: list[AxisDelta]
 
+    @computed_field
     @property
     def has_changes(self) -> bool:
         return any(a.is_actionable for a in self.axes)
 
+    @computed_field
     @property
     def headline_axis(self) -> AxisDelta | None:
         """O eixo que melhor justifica "por que ligar agora".

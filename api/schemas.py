@@ -27,6 +27,7 @@ from radar.models.company import Classification, CompanyProfile
 from radar.models.recommendation import Briefing, Recommendation
 from radar.models.scoring import DefensibilityScore, PriorityAssessment
 from radar.persistence.repositories import QueueItem
+from radar.scoring.delta import ScoreDelta
 
 # --------------------------------------------------------------------------- #
 # Busca
@@ -105,12 +106,21 @@ class QueueItemResponse(BaseModel):
     bucket: str | None = None
     urgency: float | None = None
 
+    delta: ScoreDelta | None = Field(
+        default=None,
+        description="O que mudou desde a execução anterior — o gatilho ao lado da "
+        "empresa na fila. Ausente quando a empresa só foi avaliada uma vez ou "
+        "nada mudou além do ruído.",
+    )
+
     @property
     def is_actionable(self) -> bool:
         return self.global_confidence >= 0.35
 
     @classmethod
-    def from_queue_item(cls, item: QueueItem) -> QueueItemResponse:
+    def from_queue_item(
+        cls, item: QueueItem, *, delta: ScoreDelta | None = None
+    ) -> QueueItemResponse:
         return cls(
             company_id=item.company_id,
             company_name=item.company_name,
@@ -124,6 +134,7 @@ class QueueItemResponse(BaseModel):
             scored_at=item.scored_at,
             bucket=item.bucket,
             urgency=item.urgency,
+            delta=delta,
         )
 
 
@@ -143,6 +154,12 @@ class CompanyDetailResponse(BaseModel):
     priority: PriorityAssessment | None = None
     recommendations: list[Recommendation] = Field(default_factory=list)
     has_briefing: bool = False
+
+    delta: ScoreDelta | None = Field(
+        default=None,
+        description="Diff eixo a eixo contra a execução anterior. Alimenta a seção "
+        "'o que mudou' do perfil; ausente na primeira avaliação da empresa.",
+    )
 
 
 class BriefingResponse(BaseModel):

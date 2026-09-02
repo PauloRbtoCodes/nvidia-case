@@ -60,7 +60,12 @@ async def listar_fila(
         limit=limit,
         offset=offset,
     )
-    return [QueueItemResponse.from_queue_item(item) for item in itens]
+    # O gatilho ao lado da empresa: só as que mudaram desde a última execução.
+    deltas = ScoreRepository.deltas_for(session, [item.company_id for item in itens])
+    return [
+        QueueItemResponse.from_queue_item(item, delta=deltas.get(item.company_id))
+        for item in itens
+    ]
 
 
 @router.get("/{company_id}", response_model=CompanyDetailResponse)
@@ -89,4 +94,5 @@ async def obter_empresa(company_id: UUID, session: SessionDep) -> CompanyDetailR
         priority=ScoreRepository.latest_priority(session, company_id),
         recommendations=recomendacoes,
         has_briefing=BriefingRepository.latest_row(session, company_id) is not None,
+        delta=ScoreRepository.delta(session, company_id),
     )

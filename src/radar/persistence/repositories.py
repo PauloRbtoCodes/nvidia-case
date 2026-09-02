@@ -45,6 +45,7 @@ from radar.models.scoring import (
     TCOEstimate,
 )
 from radar.persistence import tables
+from radar.scoring.delta import ScoreDelta, comparar_scores
 
 # --------------------------------------------------------------------------- #
 # Normalização de identidade
@@ -611,6 +612,42 @@ class ScoreRepository:
             .limit(limit)
         )
         return list(session.scalars(stmt))
+
+    @staticmethod
+    def delta(session: Session, company_id: UUID) -> ScoreDelta | None:
+        """O diff entre as duas avaliações mais recentes — o gatilho temporal.
+
+        Derivado no momento da leitura, não gravado: as duas linhas de score já
+        estão no banco (append-only), e uma terceira cópia do diff só criaria uma
+        trilha que pode divergir delas. `None` quando a empresa só foi avaliada
+        uma vez — não há "antes" com que comparar.
+
+        O par vem de `history(limit=2)` (mais recente primeiro), então
+        `rows[1]` é o "antes" e `rows[0]` o "depois".
+        """
+        rows = ScoreRepository.history(session, company_id, limit=2)
+        if len(rows) < 2:
+            return None
+        depois = ScoreRepository.to_pydantic(session, rows[0])
+        antes = ScoreRepository.to_pydantic(session, rows[1])
+        return comparar_scores(antes, depois)
+
+    @staticmethod
+    def deltas_for(
+        session: Session, company_ids: Sequence[UUID]
+    ) -> dict[UUID, ScoreDelta]:
+        """Diff por empresa para uma página da fila. Só entram as que têm mudança.
+
+        Um laço sobre `delta`: a fila da tela inicial é paginada (`limit` padrão
+        50), e o volume real do projeto é dezenas de empresas, não milhares.
+        Documentado como o N+1 aceito que já existe em `to_pydantic`.
+        """
+        resultado: dict[UUID, ScoreDelta] = {}
+        for company_id in company_ids:
+            diff = ScoreRepository.delta(session, company_id)
+            if diff is not None and diff.has_changes:
+                resultado[company_id] = diff
+        return resultado
 
     @staticmethod
     def latest_priority(session: Session, company_id: UUID) -> PriorityAssessment | None:

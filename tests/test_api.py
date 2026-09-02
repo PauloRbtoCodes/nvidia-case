@@ -272,6 +272,49 @@ def test_empresa_inexistente_e_404(client: TestClient):
     assert resposta.status_code == 404
 
 
+def _semear_reavaliada(session_factory, nome: str, *, urgencia: float = 50.0):
+    """Empresa com duas avaliações: antes forte, agora fraca. Devolve o id."""
+    from radar.persistence.repositories import ScoreRepository
+
+    antes = _score(nome, risco_alto=False)  # eixos em 85
+    agora = _score(nome, risco_alto=True)  # eixos em 20
+    prioridade = _prioridade(urgencia, PriorityBucket.ABORDAR_AGORA)
+    with session_factory() as sessao:
+        empresa = CompanyRepository.upsert(
+            sessao, CompanyProfile(name=nome, stage=Stage.SERIE_A)
+        )
+        ScoreRepository.add(sessao, empresa.id, antes, prioridade)
+        sessao.flush()
+        ScoreRepository.add(sessao, empresa.id, agora, prioridade)
+        sessao.commit()
+        return empresa.id
+
+
+def test_detalhe_traz_o_diff_contra_a_execucao_anterior(client: TestClient, session_factory):
+    company_id = _semear_reavaliada(session_factory, "Reavaliada")
+
+    delta = client.get(f"/companies/{company_id}").json()["delta"]
+    assert delta is not None
+    assert delta["has_changes"] is True
+    assert {a["kind"] for a in delta["axes"]} == {"piorou"}
+    assert delta["headline_axis"]["kind"] == "piorou"
+
+
+def test_primeira_avaliacao_nao_tem_diff(client: TestClient, session_factory):
+    company_id = _semear(session_factory, "So Uma Vez", urgencia=10.0)
+    assert client.get(f"/companies/{company_id}").json()["delta"] is None
+
+
+def test_fila_traz_o_gatilho_ao_lado_de_quem_mudou(client: TestClient, session_factory):
+    _semear_reavaliada(session_factory, "Mudou", urgencia=70.0)
+    _semear(session_factory, "Estavel", urgencia=40.0)
+
+    itens = {i["company_name"]: i for i in client.get("/companies").json()}
+    assert itens["Mudou"]["delta"] is not None
+    assert itens["Mudou"]["delta"]["headline_axis"]["kind"] == "piorou"
+    assert itens["Estavel"]["delta"] is None
+
+
 # --------------------------------------------------------------------------- #
 # Briefings
 # --------------------------------------------------------------------------- #
