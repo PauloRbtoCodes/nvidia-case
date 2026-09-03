@@ -46,6 +46,7 @@ ROTULOS: dict[str, str] = {
     "validate": "Auditando evidências",
     "classify": "Classificando maturidade",
     "score": "Pontuando defensibilidade",
+    "compare": "Comparando com a execução anterior",
     "rag": "Buscando na base NVIDIA",
     "recommend": "Redigindo recomendações",
     "briefing": "Escrevendo o briefing",
