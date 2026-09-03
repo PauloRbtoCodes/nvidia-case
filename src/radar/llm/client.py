@@ -62,6 +62,7 @@ TRANSPORT_BACKOFF_SECONDS = (1.0, 3.0, 8.0)
 RATE_LIMIT_BACKOFF_SECONDS = (15.0, 45.0, 90.0)
 
 _JSON_FENCE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL)
+_THINK_BLOCK = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
 _RATE_LIMIT_HINTS = ("429", "rate limit", "too many requests", "quota")
 
 
@@ -113,25 +114,73 @@ def _transport_wait(state: RetryCallState) -> float:
     return TRANSPORT_BACKOFF_SECONDS[indice]
 
 
-def extract_json(raw: str) -> str:
-    """Isola o objeto JSON de uma resposta que pode vir com preâmbulo ou cerca.
+def _primeiro_objeto_balanceado(texto: str) -> str | None:
+    """O primeiro objeto JSON com chaves balanceadas, a partir do primeiro `{`.
 
-    Modelos instruct teimam em escrever "Aqui está o JSON:" antes do bloco,
-    mesmo instruídos a não fazê-lo. Rejeitar a resposta inteira por isso gastaria
-    uma tentativa de cota por educação do modelo.
+    Conta chaves ignorando as que estão dentro de string. Substitui o par
+    `find("{")` / `rfind("}")`, que quebrava de dois jeitos observados em
+    produção com modelo de raciocínio:
+
+    - o `{` inicial caía num trecho onde o modelo *raciocinava sobre o schema*
+      ("preciso de um objeto {\"company_name\": ...}") em vez do objeto real;
+    - o `}` final caía numa frase de prosa depois do JSON ("omiti os campos
+      opcionais (o schema pedia {...})"), levando "Extra data" na desserialização.
+
+    Parar na primeira chave que fecha a profundidade 0 resolve os dois: pega o
+    objeto e ignora o que vier antes ou depois.
     """
-    fence = _JSON_FENCE.search(raw)
-    candidato = fence.group(1) if fence else raw
+    inicio = texto.find("{")
+    if inicio == -1:
+        return None
+    profundidade = 0
+    em_string = False
+    escape = False
+    for i in range(inicio, len(texto)):
+        ch = texto[i]
+        if em_string:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                em_string = False
+            continue
+        if ch == '"':
+            em_string = True
+        elif ch == "{":
+            profundidade += 1
+        elif ch == "}":
+            profundidade -= 1
+            if profundidade == 0:
+                return texto[inicio : i + 1]
+    return None
 
-    inicio = candidato.find("{")
-    fim = candidato.rfind("}")
-    if inicio == -1 or fim == -1 or fim < inicio:
+
+def extract_json(raw: str) -> str:
+    """Isola o objeto JSON de uma resposta com preâmbulo, cerca ou raciocínio.
+
+    Três ruídos que não podem custar uma tentativa de cota:
+
+    1. **Preâmbulo educado.** "Claro! Aqui está:" antes do bloco.
+    2. **Cerca de código.** ```json ... ```.
+    3. **Bloco de raciocínio.** O modelo de raciocínio às vezes ignora
+       `enable_thinking=False` e emite `<think>...</think>` — e o texto ali dentro
+       tem chaves, porque ele raciocina sobre o próprio schema. Removê-lo antes de
+       procurar o objeto é o que impede o `{` de raciocínio de virar o começo do
+       "JSON".
+    """
+    sem_raciocinio = _THINK_BLOCK.sub("", raw)
+    fence = _JSON_FENCE.search(sem_raciocinio)
+    candidato = fence.group(1) if fence else sem_raciocinio
+
+    objeto = _primeiro_objeto_balanceado(candidato)
+    if objeto is None:
         raise SchemaValidationError(
             "Resposta do modelo não contém objeto JSON.",
             raw_output=raw,
             schema_name="?",
         )
-    return candidato[inicio : fim + 1]
+    return objeto
 
 
 def _format_validation_error(exc: ValidationError) -> str:

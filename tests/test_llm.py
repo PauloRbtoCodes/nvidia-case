@@ -156,6 +156,37 @@ def test_extract_json_sem_objeto_falha_como_erro_de_schema():
         extract_json("nenhuma chave aqui")
 
 
+def test_bloco_de_raciocinio_com_chaves_nao_vira_o_json():
+    """O modelo de raciocínio ignorou `enable_thinking=False` e raciocinou sobre
+    o schema — com chaves no meio. O `<think>` inteiro tem que sair antes da
+    busca, senão o `{` do raciocínio vira o começo do 'JSON' e a resposta boa é
+    descartada, gastando as três tentativas de validação numa empresa só."""
+    bruto = (
+        '<think>Preciso devolver {"company_name": string, "grounding_ratio": number}. '
+        'Vou marcar requires_recollection como false.</think>\n'
+        '{"company_name": "Acme", "audits": [], "unsupported_fields": [], '
+        '"grounding_ratio": 0.2, "requires_recollection": false, "suggested_queries": []}'
+    )
+    audit = EvidenceAudit.model_validate_json(extract_json(bruto))
+    assert audit.company_name == "Acme"
+    assert audit.grounding_ratio == 0.2
+
+
+def test_prosa_depois_do_objeto_nao_leva_extra_data():
+    """`rfind('}')` pegava o `}` de uma frase depois do JSON. A varredura
+    balanceada para no fecho do objeto e ignora o resto."""
+    bruto = (
+        '{"nome": "Z", "idade": 1}\n\n'
+        "Omiti os campos opcionais como pedido (o schema dizia {...})."
+    )
+    assert json.loads(extract_json(bruto)) == {"nome": "Z", "idade": 1}
+
+
+def test_chave_dentro_de_string_nao_fecha_o_objeto():
+    bruto = '{"razao_social": "Acme } Tecnologia Ltda", "idade": 2}'
+    assert json.loads(extract_json(bruto))["razao_social"] == "Acme } Tecnologia Ltda"
+
+
 def test_schema_json_vai_junto_do_pedido():
     """Schema gerado do Pydantic, não escrito à mão — prompt e validação não divergem."""
     cliente, fake = build_client([json.dumps({"nome": "A", "idade": 2})])
