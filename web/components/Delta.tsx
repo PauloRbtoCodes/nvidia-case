@@ -51,7 +51,7 @@ export function DeltaSection({ delta }: { delta?: ScoreDelta | null }) {
 
   return (
     <section className="card stack-sm">
-      <div className="section-head"><span className="section-num">02</span><h2>O que mudou</h2></div>
+      <div className="section-head"><h2>O que mudou</h2></div>
       <p style={{ fontSize: 13.5, color: "var(--ink-muted)", maxWidth: "64ch" }}>
         Diff contra a execução anterior. Sinal que sumiu de uma coleta para a
         outra aparece como <em>confiança caiu</em> — nunca como piora do eixo:
