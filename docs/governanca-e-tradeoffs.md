@@ -179,8 +179,14 @@ Prazo remanescente curto. Ordem, com critério de corte:
 1. **Execução real ponta a ponta com 5 empresas.** Depende de Docker (`sudo`) e das
    três chaves. Pré-requisito absoluto.
 2. **Gatilho temporal** — eixo de tempo no modelo, nó de comparação, diff no output.
+   Feito: `computed_at` no modelo, `scoring/delta.py` (comparador puro), nó `compare`
+   entre `score` e `rag`, `ScoreDelta` no perfil e ao lado da empresa na fila da API,
+   e a seção "o que mudou" nas duas telas. **Falta** a política de frescor (§10.5): a
+   re-coleta ainda usa cache livremente, então re-rodar dentro do TTL pode concluir
+   "nada mudou" sem ter olhado as fontes de sinal.
 3. **Talk track** — extensão do nó de briefing, consumindo a seção "Quando NÃO
-   recomendar" dos cards.
+   recomendar" dos cards. O `ScoreDelta` já chega ao briefing pelo estado
+   (`CompanyState.score_delta`): `NOVA_EVIDENCIA` é a frase de abertura.
 4. **Frontend, 3 telas** — busca com progresso ao vivo (SSE), fila de prioridade com
    o gatilho ao lado, perfil com radar de 4 eixos e evidências clicáveis.
 5. **Oportunidade na fila** — se couber.
@@ -399,8 +405,15 @@ quando usá-lo.
 É decisão de produto disfarçada de parâmetro. **Política definida:** a primeira
 passada sobre uma empresa usa cache livremente; a passada de *monitoramento* força
 refresh nas fontes de sinal (carreiras, blog técnico) e mantém cache no
-institucional, que muda pouco. Implementação entra junto com o nó de comparação —
-antes disso não há passada de monitoramento para configurar.
+institucional, que muda pouco.
+
+**Estado (implementação ainda pendente).** O nó `compare` já existe, então a
+passada de monitoramento agora é identificável — `deps.score_history` devolve um
+score anterior quando a empresa já foi vista. Falta ligar isso ao `collector`:
+`HttpFetcher.fetch_many` não aceita `force_refresh`, e o `collector` não distingue
+fonte de sinal de fonte institucional na hora de decidir o refresh. Enquanto isso
+não entra, o diff de uma re-execução dentro do TTL de 7 dias pode reportar
+"estável" sobre páginas que mudaram — o gatilho fica parcialmente cego.
 
 ---
 
