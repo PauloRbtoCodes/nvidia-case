@@ -238,12 +238,20 @@ class HttpFetcher:
         )
         return result
 
-    async def fetch_many(self, urls: Iterable[str]) -> list[FetchResult]:
+    async def fetch_many(
+        self, urls: Iterable[str], *, force_refresh: bool = False
+    ) -> list[FetchResult]:
         """Sequencial de propósito: o paralelismo do lote vive no grafo (`Send`),
-        e disparar tudo aqui atropelaria o rate limit de hosts repetidos."""
+        e disparar tudo aqui atropelaria o rate limit de hosts repetidos.
+
+        `force_refresh` existe para a passada de monitoramento do radar: o TTL de
+        cache é o que faz uma re-execução dentro da semana concluir "nada mudou"
+        sem ter olhado. Quem decide quais URLs merecem a rede de novo é o
+        `collector`, que sabe distinguir fonte de sinal de fonte institucional.
+        """
         results: list[FetchResult] = []
         for url in urls:
-            result = await self.fetch(url)
+            result = await self.fetch(url, force_refresh=force_refresh)
             if result is not None:
                 results.append(result)
         return results

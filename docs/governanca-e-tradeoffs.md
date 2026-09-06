@@ -179,11 +179,10 @@ Prazo remanescente curto. Ordem, com critério de corte:
 1. **Execução real ponta a ponta com 5 empresas.** Depende de Docker (`sudo`) e das
    três chaves. Pré-requisito absoluto.
 2. **Gatilho temporal** — eixo de tempo no modelo, nó de comparação, diff no output.
-   Feito: `computed_at` no modelo, `scoring/delta.py` (comparador puro), nó `compare`
-   entre `score` e `rag`, `ScoreDelta` no perfil e ao lado da empresa na fila da API,
-   e a seção "o que mudou" nas duas telas. **Falta** a política de frescor (§10.5): a
-   re-coleta ainda usa cache livremente, então re-rodar dentro do TTL pode concluir
-   "nada mudou" sem ter olhado as fontes de sinal.
+   **Concluído:** `computed_at` no modelo, `scoring/delta.py` (comparador puro), nó
+   `compare` entre `score` e `rag`, política de frescor no `collector` (§10.5),
+   `ScoreDelta` no perfil e ao lado da empresa na fila da API, e a seção "o que
+   mudou" nas duas telas.
 3. **Talk track** — extensão do nó de briefing, consumindo a seção "Quando NÃO
    recomendar" dos cards. O `ScoreDelta` já chega ao briefing pelo estado
    (`CompanyState.score_delta`): `NOVA_EVIDENCIA` é a frase de abertura.
@@ -407,13 +406,21 @@ passada sobre uma empresa usa cache livremente; a passada de *monitoramento* for
 refresh nas fontes de sinal (carreiras, blog técnico) e mantém cache no
 institucional, que muda pouco.
 
-**Estado (implementação ainda pendente).** O nó `compare` já existe, então a
-passada de monitoramento agora é identificável — `deps.score_history` devolve um
-score anterior quando a empresa já foi vista. Falta ligar isso ao `collector`:
-`HttpFetcher.fetch_many` não aceita `force_refresh`, e o `collector` não distingue
-fonte de sinal de fonte institucional na hora de decidir o refresh. Enquanto isso
-não entra, o diff de uma re-execução dentro do TTL de 7 dias pode reportar
-"estável" sobre páginas que mudaram — o gatilho fica parcialmente cego.
+**Implementado.** `ScoreHistoryPort.seen_before` responde "já diagnosticamos esta
+empresa?" com uma consulta barata (a linha do score, sem hidratar o modelo nem o
+mapa de evidências), e o `collector` usa isso para decidir o frescor.
+
+A fronteira caiu exatamente onde a coleta já a desenhava, sem precisar classificar
+URL por URL: a **primeira onda** são as sementes (home, institucional — cache
+serve), a **segunda onda** são os links de sinal que a home revela (carreiras,
+blog de engenharia, preços, clientes — onde a mudança aparece). Numa passada de
+monitoramento só a segunda onda volta para a rede, via
+`fetch_many(..., force_refresh=True)`.
+
+Banco fora do ar devolve `False`: na dúvida, tratar como primeira passada confia
+no cache, que é o lado barato do erro. Travado em
+`test_passada_de_monitoramento_forca_so_as_fontes_de_sinal` e
+`test_primeira_passada_sobre_uma_empresa_confia_no_cache`.
 
 ---
 

@@ -16,6 +16,7 @@ genuinamente ausente vire consumo infinito de quota.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable, Coroutine
 from typing import Any
 
@@ -53,6 +54,29 @@ def _dominio_da_empresa(state: CompanyState) -> str | None:
     return None
 
 
+async def _e_passada_de_monitoramento(deps: NodeDeps, state: CompanyState) -> bool:
+    """A empresa já foi diagnosticada antes? Decide se o cache vale nesta coleta.
+
+    O TTL de 7 dias do cache de scraping colide de frente com o gatilho temporal:
+    re-rodar dentro da semana devolve a página cacheada, e o diff conclui "nada
+    mudou" sem ter olhado. Mas desligar o cache sempre pagaria rede em todo lote
+    de descoberta, onde ele é justamente o que torna a iteração barata.
+
+    Daí o meio-termo: primeira passada confia no cache, passada de monitoramento
+    força as fontes de sinal. Sem banco, é sempre primeira passada.
+    """
+    if deps.score_history is None:
+        return False
+    nome = state.get("company_name")
+    if not nome:
+        return False
+    try:
+        return await asyncio.to_thread(deps.score_history.seen_before, nome)
+    except Exception as exc:  # noqa: BLE001 - banco indisponível não trava a coleta
+        log.warning("historico_indisponivel_na_coleta", empresa=nome, erro=str(exc)[:200])
+        return False
+
+
 async def _urls_de_rebusca(deps: NodeDeps, state: CompanyState) -> list[str]:
     """Traduz as queries do validador em URLs novas.
 
@@ -84,6 +108,7 @@ async def _coletar(deps: NodeDeps, state: CompanyState, tentativa: int) -> dict[
         raise ValueError("Nenhuma URL nova para coletar.")
 
     dominio = _dominio_da_empresa(state)
+    monitoramento = tentativa == 0 and await _e_passada_de_monitoramento(deps, state)
     paginas: list[dict[str, Any]] = []
     vagas: list[str] = []
     seguir: list[str] = []
@@ -132,10 +157,17 @@ async def _coletar(deps: NodeDeps, state: CompanyState, tentativa: int) -> dict[
         }
 
     # Segunda onda: só na primeira tentativa, e só o que ainda não vimos.
+    #
+    # É aqui que a política de frescor mora, e ela cai exatamente na fronteira
+    # que a segunda onda já desenha: a primeira onda são as sementes (home,
+    # institucional — muda pouco, cache serve), a segunda são as fontes de sinal
+    # (carreiras, blog de engenharia, preços, clientes — é onde a mudança que o
+    # radar procura aparece). Numa passada de monitoramento, só esta segunda onda
+    # volta para a rede.
     vistas = ja_coletadas | {p["url"] for p in paginas} | set(alvos)
     extras = [u for u in dict.fromkeys(seguir) if u not in vistas][:MAX_LINKS_SEGUIDOS]
     if extras:
-        for resultado in await deps.fetcher.fetch_many(extras):
+        for resultado in await deps.fetcher.fetch_many(extras, force_refresh=monitoramento):
             if not resultado.ok:
                 continue
             base = resultado.final_url or resultado.url
@@ -152,6 +184,7 @@ async def _coletar(deps: NodeDeps, state: CompanyState, tentativa: int) -> dict[
         extras=len(extras),
         paginas=len(paginas),
         vagas=len(set(vagas)),
+        monitoramento=monitoramento,
     )
     return {
         "raw_pages": paginas,

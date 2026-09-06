@@ -62,6 +62,16 @@ class ScoreHistoryPort(Protocol):
         """
         ...
 
+    def seen_before(self, company_name: str) -> bool:
+        """Esta empresa já foi diagnosticada antes? Decide a política de frescor.
+
+        Método separado de `previous_score` porque o `collector` roda antes do
+        `compare` e só precisa do booleano: hidratar o score inteiro (com o mapa
+        de evidências da empresa) para responder "já vi isso?" seria pagar caro
+        por um bit.
+        """
+        ...
+
 
 def _hoje() -> date:
     return datetime.now(UTC).date()

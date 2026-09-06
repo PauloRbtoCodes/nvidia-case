@@ -145,11 +145,17 @@ class FetcherFake:
         self.paginas = paginas
         self.bloqueadas = set(bloqueadas)
         self.pedidos: list[str] = []
+        self.forcados: list[str] = []
+        """URLs pedidas com `force_refresh` — é o que a política de frescor promete."""
 
-    async def fetch_many(self, urls: Any) -> list[FetchResult]:
+    async def fetch_many(
+        self, urls: Any, *, force_refresh: bool = False
+    ) -> list[FetchResult]:
         resultados: list[FetchResult] = []
         for url in urls:
             self.pedidos.append(url)
+            if force_refresh:
+                self.forcados.append(url)
             if url in self.bloqueadas:
                 resultados.append(FetchResult(url=url, status_code=403, html=""))
                 continue
@@ -478,6 +484,11 @@ class HistoricoFake:
             raise self.erro
         return self.anterior
 
+    def seen_before(self, company_name: str) -> bool:
+        if self.erro is not None:
+            raise self.erro
+        return self.anterior is not None
+
 
 @dataclass
 class Ambiente:
@@ -670,6 +681,31 @@ async def test_ausencia_de_evidencia_nao_vira_piora_no_grafo():
     stack = next(a for a in delta.axes if a.axis is DefensibilityAxis.STACK_OWNERSHIP)
     assert stack.kind is ChangeKind.CONFIANCA_CAIU
     assert stack.kind is not ChangeKind.PIOROU
+
+
+async def test_primeira_passada_sobre_uma_empresa_confia_no_cache():
+    ambiente = montar(historico=HistoricoFake(anterior=None))
+    await executar(ambiente)
+
+    assert ambiente.fetcher.forcados == [], (
+        "sem execução anterior não há mudança a detectar; forçar rede aqui só "
+        "encareceria o lote de descoberta"
+    )
+
+
+async def test_passada_de_monitoramento_forca_so_as_fontes_de_sinal():
+    """O TTL do cache é o que faria o diff dizer "nada mudou" sem ter olhado.
+
+    Numa empresa já vista, carreiras e blog voltam para a rede — é onde a vaga
+    nova aparece. A home fica no cache: institucional muda pouco, e pagar rede
+    por ela em todo monitoramento é desperdício.
+    """
+    ambiente = montar(historico=HistoricoFake(anterior=_score_anterior(stack_score=70.0)))
+    await executar(ambiente)
+
+    assert CARREIRAS_URL in ambiente.fetcher.forcados
+    assert BLOG_URL in ambiente.fetcher.forcados
+    assert HOME_URL not in ambiente.fetcher.forcados
 
 
 async def test_erro_ao_ler_o_historico_vira_falha_e_nao_derruba_o_briefing():

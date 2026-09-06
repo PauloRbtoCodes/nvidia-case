@@ -39,3 +39,18 @@ class DbScoreHistory:
             if company is None:
                 return None
             return ScoreRepository.latest(session, company.id)
+
+    def seen_before(self, company_name: str) -> bool:
+        """Só a linha de score, sem hidratar o modelo nem o mapa de evidências.
+
+        Banco fora do ar devolve `False`: na dúvida, tratar como primeira passada
+        significa confiar no cache, que é o comportamento mais barato — o oposto
+        (forçar rede em todo lote quando o Postgres pisca) sairia caro sem motivo.
+        """
+        if not db.healthcheck():
+            return False
+        with db.session_scope() as session:
+            company = CompanyRepository.get_by_name(session, company_name)
+            if company is None:
+                return False
+            return ScoreRepository.latest_row(session, company.id) is not None
