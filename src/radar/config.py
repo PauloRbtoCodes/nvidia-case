@@ -21,12 +21,16 @@ class Settings(BaseSettings):
     # NVIDIA NIM
     nvidia_api_key: str = Field(default="")
     nim_base_url: str = "https://integrate.api.nvidia.com/v1"
-    nim_chat_model: str = "meta/llama-3.3-70b-instruct"
-    nim_fast_model: str = "meta/llama-3.1-8b-instruct"
+    nim_chat_model: str = "nvidia/nemotron-3-super-120b-a12b"
+    nim_fast_model: str = "nvidia/nemotron-3.5-lightning-30b-a3b"
     """Modelo pequeno para tarefas onde o erro é barato e detectável adiante
     (search planner, evidence validator). A quota gratuita do NIM é limitada, e
     gastar o modelo grande em planejamento de query desperdiça o orçamento das
-    tarefas que realmente precisam de raciocínio."""
+    tarefas que realmente precisam de raciocínio.
+
+    Nemotron e não Llama: verificado em 2026-09-09, `llama-3.3-70b` perdeu o
+    endpoint gratuito e `llama-3.1-8b` foi deprecado. Os substitutos gratuitos são
+    todos Nemotron — num case para a NVIDIA, também é a narrativa mais coerente."""
 
     nim_embed_model: str = "nvidia/nemotron-3-embed-1b"
 

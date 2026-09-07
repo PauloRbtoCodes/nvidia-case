@@ -17,7 +17,7 @@ from radar.config import Settings, get_settings
 
 #: Fallback do modelo pequeno. A fonte real é `Settings.nim_fast_model`
 #: (variável `NIM_FAST_MODEL`); este valor só entra se a configuração vier vazia.
-DEFAULT_FAST_MODEL = "meta/llama-3.1-8b-instruct"
+DEFAULT_FAST_MODEL = "nvidia/nemotron-3.5-lightning-30b-a3b"
 
 
 class ModelTier(StrEnum):
@@ -75,12 +75,12 @@ DEFAULT_TASK_TEMPERATURES: dict[LLMTask, float] = {
 class ModelRegistry:
     """Resolve tarefa → modelo concreto.
 
-    `task_overrides` existe para o experimento da seção 13 do plano (llama vs
-    nemotron por agente) não exigir mudança de código.
+    `task_overrides` existe para comparar modelos por agente (ex.: um Nemotron
+    maior no scorer, um menor no resto) sem mudança de código.
     """
 
     fast_model: str = DEFAULT_FAST_MODEL
-    reasoning_model: str = "meta/llama-3.3-70b-instruct"
+    reasoning_model: str = "nvidia/nemotron-3-super-120b-a12b"
     task_tiers: dict[LLMTask, ModelTier] = field(default_factory=lambda: dict(DEFAULT_TASK_TIERS))
     task_overrides: dict[LLMTask, str] = field(default_factory=dict)
 
