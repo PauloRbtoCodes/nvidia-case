@@ -15,24 +15,24 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        {/* Archivo variável: o eixo de largura (wdth) é usado como elemento de
+            design — nome de empresa e título saem expandidos, corpo fica normal.
+            Uma família só, sem par display/corpo. */}
         <link
           rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,400..700&display=swap"
         />
       </head>
       <body>
         <a href="#conteudo" className="visually-hidden">Pular para o conteúdo</a>
-        <header className="topbar">
-          <div className="topbar-inner">
-            {/* A logo leva ao Painel, não à busca: clicar na marca é "voltar ao
-                início", e disparar uma tela de ação nesse gesto surpreende. */}
-            <Link href="/" className="brand" aria-label="Startup AI Radar — ir para o painel">
+        <header className="masthead">
+          <div className="masthead-inner">
+            {/* A marca leva ao painel: clicar nela é "voltar ao início", e
+                disparar uma tela de ação nesse gesto surpreende. */}
+            <Link href="/" className="mark" aria-label="Startup AI Radar — ir para o painel">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/mascote.jpeg" alt="" width={52} height={52} />
-              <span className="brand-text">
-                <b>Startup AI Radar</b>
-                <span>Startups &amp; VCs · Inception Brasil</span>
-              </span>
+              <img src="/mascote.jpeg" alt="" width={34} height={34} />
+              <b>Startup AI Radar</b>
             </Link>
             <NavLinks />
           </div>

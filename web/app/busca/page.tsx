@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import { IconSeta } from "@/components/Icons";
 
 interface Evento {
   t: string;
@@ -19,21 +18,21 @@ const EXEMPLOS = [
   "startups de IA jurídica no Brasil",
 ];
 
+/**
+ * Varredura — o formulário e o log ao vivo.
+ *
+ * A numeração dos passos é legítima aqui: eles são a ordem real em que o grafo
+ * executa (plan → discover → collect/classify → score/recommend), então a
+ * explicação nunca diverge do que roda. É o único outro lugar do produto, além
+ * da fila, onde o conteúdo é mesmo uma sequência.
+ */
 const PASSOS = [
-  ["1", "Planeja a busca", "Um modelo traduz sua consulta em consultas de pesquisa reais"],
-  ["2", "Descobre empresas", "Filtra notícias, vagas e diretórios — só sites de empresa passam"],
-  ["3", "Coleta e classifica", "Lê o site, as vagas e a imprensa; decide se é AI-native"],
-  ["4", "Pontua e recomenda", "Mede defensibilidade e sugere a tecnologia NVIDIA certa"],
+  ["Planeja a busca", "Um modelo traduz sua frase em consultas de pesquisa reais"],
+  ["Descobre empresas", "Filtra notícia, vaga e diretório — só site de empresa passa"],
+  ["Lê e classifica", "Percorre site, vagas e imprensa; decide se é AI-native"],
+  ["Pontua e recomenda", "Mede defensibilidade e escolhe a tecnologia NVIDIA certa"],
 ] as const;
 
-/**
- * Tela de busca — com a explicação do pipeline antes do formulário.
- *
- * Sem contexto, "iniciar varredura" é um botão sem promessa clara: quanto
- * tempo leva, o que aparece, por que confiar no resultado. Os quatro passos
- * abaixo espelham exatamente os nós do grafo (plan → discover → collect/
- * classify → score/recommend), então a explicação nunca diverge do que roda.
- */
 export default function BuscaPage() {
   const [query, setQuery] = useState("");
   const [maxCompanies, setMax] = useState(5);
@@ -58,7 +57,7 @@ export default function BuscaPage() {
       try {
         const d = JSON.parse(ev.data);
         const node = String(d.node ?? d.event ?? d.type ?? "evento");
-        const msg = String(d.message ?? d.detail ?? d.company ?? JSON.stringify(d));
+        const msg = String(d.message ?? d.detail ?? d.company ?? "");
         const erroEvento = /fail|erro|error/i.test(node) || d.level === "error" || d.kind === "bug";
         setEventos((prev) => [
           ...prev,
@@ -95,38 +94,19 @@ export default function BuscaPage() {
     }
   }
 
-  function usarExemplo(texto: string) {
-    setQuery(texto);
-    inputRef.current?.focus();
-  }
-
   return (
     <div className="stack">
       <div className="stack-sm">
-        <span className="label">Nova varredura</span>
-        <h1>Descreva o setor ou perfil que você procura</h1>
-        <p style={{ color: "var(--ink-muted)", maxWidth: "64ch" }}>
-          Escreva como falaria com um colega — setor, estágio, região. O radar
-          traduz isso em buscas reais, encontra as empresas e diagnostica cada
-          uma, com o progresso aparecendo aqui ao vivo.
+        <h1>Descreva o setor que você quer varrer</h1>
+        <p className="lede">
+          Escreva como falaria com um colega — setor, estágio, região. O radar traduz isso
+          em buscas reais, encontra as empresas e diagnostica cada uma, com o progresso
+          aparecendo aqui enquanto acontece.
         </p>
       </div>
 
-      <section className="card stack-sm">
-        <span className="label">Como funciona</span>
-        <div className="steps">
-          {PASSOS.map(([n, titulo, desc]) => (
-            <div className="step" key={n}>
-              <span className="step-n">{n}</span>
-              <b>{titulo}</b>
-              <p>{desc}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <form className="card stack-sm" onSubmit={iniciar}>
-        <div className="search-form">
+      <form className="sheet stack-sm" onSubmit={iniciar}>
+        <div className="form-row">
           <div className="field">
             <label htmlFor="q">O que você procura</label>
             <input
@@ -135,82 +115,84 @@ export default function BuscaPage() {
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="ex.: startups brasileiras de IA para saúde"
+              placeholder="startups brasileiras de IA para saúde"
               required
             />
           </div>
-          <div className="field narrow">
+          <div className="field is-narrow">
             <label htmlFor="n">Quantas empresas</label>
             <input
-              id="n"
-              type="number"
-              min={1}
-              max={12}
-              value={maxCompanies}
+              id="n" type="number" min={1} max={12} value={maxCompanies}
               onChange={(e) => setMax(Number(e.target.value))}
             />
           </div>
           <button className="btn" type="submit" disabled={rodando}>
-            {rodando ? "Executando…" : "Iniciar varredura"}
+            {rodando ? "Varrendo…" : "Iniciar varredura"}
           </button>
         </div>
 
-        <div className="stack-sm" style={{ gap: 8 }}>
-          <span className="label" style={{ fontSize: 11 }}>Ou experimente um exemplo</span>
-          <div className="examples">
-            {EXEMPLOS.map((ex) => (
-              <button key={ex} type="button" className="example" onClick={() => usarExemplo(ex)}>
-                {ex}
-              </button>
-            ))}
-          </div>
+        <div className="chips" style={{ marginTop: 4 }}>
+          {EXEMPLOS.map((ex) => (
+            <button key={ex} type="button" className="chip-btn"
+                    onClick={() => { setQuery(ex); inputRef.current?.focus(); }}>
+              {ex}
+            </button>
+          ))}
         </div>
       </form>
 
       {erro ? (
         <p className="alert" role="alert">
-          <strong>Não foi possível iniciar a varredura.</strong> {erro}
-          <br />
-          Confira se a API está no ar em <code className="mono">localhost:8000</code>{" "}
-          (comando <code className="mono">make api</code>).
+          <strong>A varredura não começou.</strong> {erro} Confira se a API está no ar em{" "}
+          <code>localhost:8000</code> — o comando é <code>make api</code>.
         </p>
       ) : null}
 
       {runId ? (
-        <section className="card stack-sm" aria-live="polite">
+        <section className="section" aria-live="polite">
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-            <h2>Progresso da varredura</h2>
-            <span className="mono" style={{ fontSize: 14, color: "var(--ink-muted)" }}>
-              {status} · {eventos.length} evento{eventos.length === 1 ? "" : "s"}
+            <h2>Progresso</h2>
+            <span className="note num">
+              {status}, {eventos.length} {eventos.length === 1 ? "passo" : "passos"}
             </span>
           </div>
           {eventos.length === 0 ? (
-            <p style={{ color: "var(--ink-muted)" }}>Aguardando o primeiro passo do radar…</p>
+            <p className="note" style={{ marginTop: 14 }}>Aguardando o primeiro passo do radar…</p>
           ) : (
-            <div className="events">
+            <div className="log" style={{ marginTop: 14 }}>
               {eventos.map((ev, i) => (
-                <div className={`event${ev.erro ? " is-error" : ""}`} key={i}>
+                <div className={`log-line${ev.erro ? " is-error" : ""}`} key={i}>
                   <time>{ev.t}</time>
-                  <span className="node">{ev.node}</span>
-                  <p>{ev.msg}</p>
+                  <b>{ev.node}</b>
+                  {ev.msg ? <p>{ev.msg}</p> : null}
                 </div>
               ))}
               <div ref={fimRef} />
             </div>
           )}
           {!rodando && eventos.length > 0 ? (
-            <div className="callout" style={{ marginTop: 4 }}>
-              <span className="label">Varredura concluída</span>
-              <p>
-                <Link href="/fila" style={{ color: "var(--accent-ink)", fontWeight: 600,
-                  display: "inline-flex", alignItems: "center", gap: 8 }}>
-                  Ver quem entrou na fila de prioridade <IconSeta />
-                </Link>
-              </p>
-            </div>
+            <p style={{ marginTop: 20 }}>
+              <Link href="/fila" className="link-fwd">Ver quem entrou na fila</Link>
+            </p>
           ) : null}
         </section>
-      ) : null}
+      ) : (
+        <section className="section">
+          <h2>O que acontece quando você aperta o botão</h2>
+          <dl className="kv" style={{ marginTop: 16, gap: "16px 24px" }}>
+            {PASSOS.map(([titulo, desc], i) => (
+              <div key={titulo} style={{ display: "contents" }}>
+                <dt className="num" style={{ color: "var(--ink-soft)" }}>{i + 1}</dt>
+                <dd>
+                  <b style={{ fontWeight: 600 }}>{titulo}</b>
+                  <br />
+                  <span className="note">{desc}</span>
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
     </div>
   );
 }

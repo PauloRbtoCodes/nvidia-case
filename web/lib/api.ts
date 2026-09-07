@@ -16,11 +16,11 @@ export const BUCKET_LABEL: Record<Bucket, string> = {
 };
 
 /** Cada bucket tem cor própria E rótulo — a cor nunca carrega o sentido sozinha. */
-export const BUCKET_VARS: Record<Bucket, { fg: string; wash: string }> = {
-  abordar_agora: { fg: "var(--abordar)", wash: "var(--abordar-wash)" },
-  nutrir: { fg: "var(--nutrir)", wash: "var(--nutrir-wash)" },
-  case_potencial: { fg: "var(--case)", wash: "var(--case-wash)" },
-  monitorar: { fg: "var(--monitorar)", wash: "var(--monitorar-wash)" },
+export const BUCKET_VARS: Record<Bucket, { fg: string }> = {
+  abordar_agora: { fg: "var(--abordar)" },
+  nutrir: { fg: "var(--nutrir)" },
+  case_potencial: { fg: "var(--case)" },
+  monitorar: { fg: "var(--monitorar)" },
 };
 
 export const AXIS_LABEL: Record<string, string> = {
@@ -67,17 +67,27 @@ export interface ScoreDelta {
   headline_axis?: AxisDelta | null;
 }
 
+/**
+ * Espelha `QueueItemResponse` do backend, campo a campo.
+ *
+ * `bucket` e `urgency` são anuláveis de verdade: a fila inclui empresa avaliada
+ * mas ainda não priorizada — some dela seria pior — e nesse caso a ordenação cai
+ * para o risco. Tratar os dois como obrigatórios aqui quebraria a tela na
+ * primeira empresa nessa situação.
+ */
 export interface QueueItem {
   company_id: string;
   company_name: string;
-  bucket: Bucket;
-  urgency: number;
+  website?: string | null;
+  stage: string;
+  total: number;
   commoditization_risk: number;
   global_confidence: number;
-  weakest_axis?: string | null;
-  sector?: string | null;
-  maturity?: string | null;
-  recommended_next_step?: string | null;
+  weakest_axis: string;
+  weights_version: string;
+  scored_at: string;
+  bucket?: Bucket | null;
+  urgency?: number | null;
   delta?: ScoreDelta | null;
 }
 

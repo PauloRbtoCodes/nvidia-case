@@ -2,20 +2,19 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AXIS_LABEL, api, BUCKET_LABEL, BUCKET_VARS, type Bucket, type QueueItem } from "@/lib/api";
+import { AXIS_LABEL, api, BUCKET_LABEL, type Bucket, type QueueItem } from "@/lib/api";
 import { BucketChip } from "@/components/Chip";
 import { DeltaTag } from "@/components/Delta";
-import { IconSeta } from "@/components/Icons";
+import { MiniReading } from "@/components/Reading";
 
 const ORDEM: Bucket[] = ["abordar_agora", "case_potencial", "nutrir", "monitorar"];
 
 /**
- * Tela 2 — a fila da semana.
+ * A fila da semana — a tela que responde "a quem ligo hoje".
  *
- * O produto para o gerente não é uma lista, é uma **ordem**: a posição responde
- * "a quem ligo hoje". Os filtros por bucket existem porque, na prática, quem
- * abre esta tela já sabe que tipo de conversa tem tempo para hoje — "abordar
- * agora" é uma pergunta diferente de "quem eu deveria nutrir esta semana".
+ * É um registro, não uma lista de cartões: a posição é o produto, então a ordem
+ * precisa ser lida de cima para baixo sem que cada linha peça atenção igual. A
+ * numeração é legítima aqui e só aqui, porque o conteúdo é mesmo uma sequência.
  */
 export default function FilaPage() {
   const [itens, setItens] = useState<QueueItem[] | null>(null);
@@ -28,9 +27,14 @@ export default function FilaPage() {
 
   const contagem = useMemo(() => {
     const c: Record<string, number> = {};
-    for (const it of itens ?? []) c[it.bucket] = (c[it.bucket] ?? 0) + 1;
+    for (const it of itens ?? []) if (it.bucket) c[it.bucket] = (c[it.bucket] ?? 0) + 1;
     return c;
   }, [itens]);
+
+  const mudaram = useMemo(
+    () => (itens ?? []).filter((it) => it.delta?.has_changes).length,
+    [itens],
+  );
 
   const visiveis = useMemo(
     () => (itens ?? []).filter((it) => filtro === "todos" || it.bucket === filtro),
@@ -40,85 +44,89 @@ export default function FilaPage() {
   return (
     <div className="stack">
       <div className="stack-sm">
-        <span className="label">Fila de prioridade</span>
         <h1>A quem falar primeiro</h1>
-        <p style={{ color: "var(--ink-muted)", maxWidth: "64ch" }}>
-          Ordenada por <strong style={{ color: "var(--ink)" }}>urgência = risco × capacidade de agir</strong>,
-          ponderada pela confiança do diagnóstico. Vulnerável e capitalizada é conversa
-          urgente; vulnerável sem capital é nutrição via comunidade.
+        <p className="lede">
+          Ordenada por urgência: o risco de comoditização multiplicado pela capacidade de
+          reagir, ponderada pela confiança do diagnóstico. Vulnerável e capitalizada é
+          conversa urgente; vulnerável sem capital é nutrição pela comunidade.
         </p>
+        {itens && itens.length > 0 ? (
+          <p className="note">
+            {itens.length} {itens.length === 1 ? "empresa diagnosticada" : "empresas diagnosticadas"}
+            {mudaram > 0
+              ? `, ${mudaram} com mudança desde a varredura anterior`
+              : ", nenhuma mudou desde a varredura anterior"}.
+          </p>
+        ) : null}
       </div>
 
       {erro ? (
-        <p className="alert" role="alert"><strong>Não foi possível carregar a fila.</strong> {erro}</p>
+        <p className="alert" role="alert">
+          <strong>A fila não carregou.</strong> {erro} Confira se a API está no ar
+          (<code>make api</code>).
+        </p>
       ) : null}
 
       {itens === null && !erro ? (
-        <p className="empty">Carregando…</p>
+        <p className="empty">Carregando a fila…</p>
       ) : itens && itens.length === 0 ? (
         <p className="empty">
           Nenhuma empresa diagnosticada ainda.{" "}
-          <Link href="/busca" style={{ color: "var(--accent-ink)", fontWeight: 600 }}>Rodar uma varredura</Link>.
+          <Link href="/busca" className="link-fwd">Rodar a primeira varredura</Link>.
         </p>
       ) : (
-        <>
-          <div className="filters" role="group" aria-label="Filtrar por prioridade">
-            <button
-              type="button" className="filter" aria-pressed={filtro === "todos"}
-              onClick={() => setFiltro("todos")}
-            >
-              Todos · {itens?.length ?? 0}
+        <div>
+          <div className="chips" role="group" aria-label="Filtrar por decisão de agenda"
+               style={{ marginBottom: 4 }}>
+            <button type="button" className="chip-btn" aria-pressed={filtro === "todos"}
+                    onClick={() => setFiltro("todos")}>
+              Todas as {itens?.length ?? 0}
             </button>
-            {ORDEM.map((b) => (
-              <button
-                key={b} type="button" className="filter" aria-pressed={filtro === b}
-                onClick={() => setFiltro(b)}
-              >
-                {BUCKET_LABEL[b]} · {contagem[b] ?? 0}
+            {ORDEM.filter((b) => contagem[b]).map((b) => (
+              <button key={b} type="button" className="chip-btn" aria-pressed={filtro === b}
+                      onClick={() => setFiltro(b)}>
+                {BUCKET_LABEL[b]} ({contagem[b]})
               </button>
             ))}
           </div>
 
           {visiveis.length === 0 ? (
-            <p className="empty">Nenhuma empresa neste bucket.</p>
+            <p className="empty">Nenhuma empresa com essa decisão de agenda no momento.</p>
           ) : (
-            <div className="queue">
-              {visiveis.map((it, i) => {
-                const v = BUCKET_VARS[it.bucket] ?? BUCKET_VARS.monitorar;
-                return (
-                  <Link
-                    key={it.company_id}
-                    href={`/empresa/${it.company_id}`}
-                    className="queue-row"
-                    style={{ ["--chip-fg" as string]: v.fg, ["--chip-wash" as string]: v.wash }}
-                  >
-                    <span className="queue-rank tabular">{i + 1}</span>
-                    <span>
-                      <span className="queue-name">{it.company_name || "sem nome"}</span>
-                      <span className="queue-meta">
-                        <BucketChip bucket={it.bucket} />
-                        {it.sector ? <span>{it.sector}</span> : null}
-                        {it.weakest_axis ? (
-                          <span>eixo fraco: {AXIS_LABEL[it.weakest_axis] ?? it.weakest_axis}</span>
-                        ) : null}
-                        <DeltaTag delta={it.delta} />
-                      </span>
-                      {it.recommended_next_step ? (
-                        <span className="queue-next">{it.recommended_next_step}</span>
-                      ) : null}
+            <div className="register">
+              {visiveis.map((it, i) => (
+                <Link key={it.company_id} href={`/empresa/${it.company_id}`} className="entry">
+                  <span className="entry-rank num" aria-hidden>{i + 1}</span>
+
+                  <span>
+                    <span className="entry-name">{it.company_name || "empresa sem nome"}</span>
+                    <span className="entry-meta">
+                      {it.bucket ? <BucketChip bucket={it.bucket} /> : null}
+                      <span>eixo mais fraco: {AXIS_LABEL[it.weakest_axis] ?? it.weakest_axis}</span>
+                      {typeof it.urgency === "number" ? (
+                        <span className="num">urgência {it.urgency.toFixed(0)}</span>
+                      ) : (
+                        <span>ainda sem priorização</span>
+                      )}
                     </span>
-                    <span className="queue-metrics">
-                      <span className="metric"><b>{it.urgency.toFixed(1)}</b><span>urgência</span></span>
-                      <span className="metric"><b>{Math.round(it.commoditization_risk)}</b><span>risco</span></span>
-                      <span className="metric"><b>{it.global_confidence.toFixed(2)}</b><span>confiança</span></span>
-                      <span className="queue-go" aria-hidden><IconSeta /></span>
-                    </span>
-                  </Link>
-                );
-              })}
+                    {it.delta?.has_changes ? (
+                      <span className="entry-trigger"><DeltaTag delta={it.delta} /></span>
+                    ) : null}
+                  </span>
+
+                  <span className="entry-readings">
+                    <MiniReading
+                      label="risco de comoditização"
+                      value={it.commoditization_risk}
+                      confidence={it.global_confidence}
+                      weak
+                    />
+                  </span>
+                </Link>
+              ))}
             </div>
           )}
-        </>
+        </div>
       )}
     </div>
   );

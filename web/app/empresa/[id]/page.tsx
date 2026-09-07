@@ -3,15 +3,15 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { AXIS_LABEL, api, type BriefingOut, type CompanyDetail } from "@/lib/api";
-import { IconSeta } from "@/components/Icons";
 import { Axes } from "@/components/Axes";
 import { BucketChip } from "@/components/Chip";
 import { DeltaSection } from "@/components/Delta";
+import { Reading } from "@/components/Reading";
 
 /**
- * Tela 3 — perfil da empresa.
+ * Perfil da empresa — os cinco minutos antes da ligação.
  *
- * O radar de quatro eixos com evidências clicáveis é o que sustenta a tese do
+ * O radar de quatro eixos com evidência clicável é o que sustenta a tese do
  * projeto: nenhuma afirmação existe sem URL e trecho literal, e quem lê confere
  * a fonte em um clique. Sem isso o briefing seria só texto plausível.
  */
@@ -30,13 +30,13 @@ export default function EmpresaPage({ params }: { params: Promise<{ id: string }
     return (
       <div className="stack">
         <p className="alert" role="alert">
-          <strong>Não foi possível carregar a empresa.</strong> {erro}
+          <strong>Este perfil não carregou.</strong> {erro}
         </p>
-        <p><Link href="/fila" style={{ color: "var(--accent)" }}>← Voltar para a fila</Link></p>
+        <p><Link href="/fila" className="link-fwd">Voltar para a fila</Link></p>
       </div>
     );
   }
-  if (!c) return <p className="empty">Carregando…</p>;
+  if (!c) return <p className="empty">Carregando o perfil…</p>;
 
   const p = c.profile;
   const d = c.defensibility;
@@ -45,75 +45,69 @@ export default function EmpresaPage({ params }: { params: Promise<{ id: string }
   return (
     <div className="stack">
       <p style={{ fontSize: 15 }}>
-        <Link href="/fila" style={{ color: "var(--ink-muted)", display: "inline-flex",
-          alignItems: "center", gap: 6, fontWeight: 500 }}>
-          <span style={{ transform: "scaleX(-1)", display: "inline-flex" }}><IconSeta /></span>
+        <Link href="/fila" className="note" style={{ textDecoration: "underline", textUnderlineOffset: 3 }}>
           Voltar para a fila
         </Link>
       </p>
 
       <div className="stack-sm">
-        <span className="label">
-          {setor ?? "setor não identificado"}
-          {c.classification ? ` · ${c.classification.maturity}` : ""}
-          {c.classification ? ` · confiança ${c.classification.confidence.toFixed(2)}` : ""}
-        </span>
-        <h1>{p.name}</h1>
-        {p.website ? (
-          <p style={{ fontSize: 14 }}>
+        <h1 style={{ fontVariationSettings: '"wdth" 118' }}>{p.name}</h1>
+        <p className="facts">
+          {setor ? <span>{setor}</span> : <span>setor não identificado</span>}
+          {c.classification ? <span>{c.classification.maturity}</span> : null}
+          {p.stage ? <span>{p.stage}</span> : null}
+          {p.website ? (
             <a href={p.website} target="_blank" rel="noopener noreferrer"
                style={{ color: "var(--case)", textDecoration: "underline", textUnderlineOffset: 2 }}>
               {p.website.replace(/^https?:\/\//, "").replace(/\/$/, "")}
             </a>
-          </p>
-        ) : null}
-        {p.description ? (
-          <p style={{ color: "var(--ink-muted)", maxWidth: "68ch" }}>{p.description}</p>
-        ) : null}
+          ) : null}
+        </p>
+        {p.description ? <p className="lede" style={{ fontSize: 16 }}>{p.description}</p> : null}
       </div>
 
       {!d ? (
         <p className="empty">
-          Esta empresa ainda não tem score de defensibilidade — a pipeline foi
-          interrompida antes do diagnóstico.
+          Esta empresa ainda não tem score de defensibilidade — a pipeline foi interrompida
+          antes do diagnóstico. Rode a varredura de novo para completar a leitura.
         </p>
       ) : (
         <>
-          <section className="card stack-sm">
-            <div style={{ display: "flex", gap: 30, flexWrap: "wrap", alignItems: "flex-start" }}>
-              <span className="metric" style={{ textAlign: "left" }}>
-                <b style={{ fontSize: 30 }}>{Math.round(d.total)}</b>
-                <span>defensibilidade</span>
-              </span>
-              <span className="metric" style={{ textAlign: "left" }}>
-                <b style={{ fontSize: 30 }}>{Math.round(d.commoditization_risk)}</b>
-                <span>risco de comoditização</span>
-              </span>
-              <span className="metric" style={{ textAlign: "left" }}>
-                <b style={{ fontSize: 30 }}>{d.global_confidence.toFixed(2)}</b>
-                <span>confiança global</span>
-              </span>
+          <section className="section">
+            <h2>Leitura geral</h2>
+            <div style={{ display: "flex", gap: 40, flexWrap: "wrap", alignItems: "flex-start" }}>
+              <div style={{ flex: "1 1 300px", maxWidth: 440 }}>
+                <Reading
+                  name="Risco de comoditização"
+                  value={d.commoditization_risk}
+                  confidence={d.global_confidence}
+                  suffix="/100"
+                  weak
+                  aside={`defensibilidade ${Math.round(d.total)}`}
+                />
+              </div>
               {c.priority ? (
-                <span style={{ marginLeft: "auto", alignSelf: "center" }}>
+                <div style={{ paddingTop: 4 }}>
                   <BucketChip bucket={c.priority.bucket} big />
-                </span>
+                  <p className="note" style={{ marginTop: 6 }}>
+                    eixo mais fraco: {AXIS_LABEL[d.weakest_axis] ?? d.weakest_axis}
+                  </p>
+                </div>
               ) : null}
             </div>
-            <p style={{ fontSize: 12.5, color: "var(--ink-muted)" }}>
-              Pesos <code className="mono">{d.weights_version}</code> · eixo mais fraco:{" "}
-              {AXIS_LABEL[d.weakest_axis] ?? d.weakest_axis}
+            <p className="note" style={{ marginTop: 16 }}>
+              Calculado com os pesos <code>{d.weights_version}</code>.
             </p>
           </section>
 
-          <section className="card stack-sm">
-            <div className="section-head"><span className="section-num">01</span><h2>Defensibility Radar</h2></div>
-            <p style={{ fontSize: 13.5, color: "var(--ink-muted)", maxWidth: "64ch" }}>
-              Score e confiança são números independentes. Eixo com confiança abaixo de
-              0,35 aparece como <em>evidência insuficiente</em> — nunca como nota baixa.
+          <section className="section">
+            <h2>Os quatro eixos</h2>
+            <p className="lede" style={{ fontSize: 15, marginBottom: 22 }}>
+              Cada eixo traz duas marcas na mesma escala: a barra grossa é a leitura, a fina
+              é quanta evidência a sustenta. Abaixo de 0,35 de confiança o número some — não
+              sabemos, e isso não é o mesmo que nota baixa.
             </p>
-            <div style={{ marginTop: 8 }}>
-              <Axes axes={d.axes ?? []} weakest={d.weakest_axis} />
-            </div>
+            <Axes axes={d.axes ?? []} weakest={d.weakest_axis} />
           </section>
 
           <DeltaSection delta={c.delta} />
@@ -121,55 +115,62 @@ export default function EmpresaPage({ params }: { params: Promise<{ id: string }
       )}
 
       {c.priority ? (
-        <section className="card stack-sm">
-          <div className="section-head"><span className="section-num">02</span><h2>Prioridade</h2></div>
-          <dl className="kv">
-            <dt>Urgência</dt><dd>{c.priority.urgency.toFixed(1)} / 100</dd>
+        <section className="section">
+          <h2>Por que esta posição na fila</h2>
+          <dl className="kv" style={{ marginBottom: 14 }}>
+            <dt>Urgência</dt><dd>{c.priority.urgency.toFixed(0)} de 100</dd>
             <dt>Capacidade de agir</dt><dd>{(c.priority.capacity_to_act ?? 0).toFixed(2)}</dd>
           </dl>
           {c.priority.capacity_rationale ? (
-            <p style={{ fontSize: 13.5, color: "var(--ink-muted)" }}>{c.priority.capacity_rationale}</p>
+            <p className="note" style={{ fontSize: 15.5, maxWidth: "66ch" }}>
+              {c.priority.capacity_rationale}
+            </p>
           ) : null}
           {c.priority.recommended_next_step ? (
-            <p style={{ fontSize: 14.5 }}>
-              <strong>Próximo passo.</strong> {c.priority.recommended_next_step}
+            <p style={{ marginTop: 12, maxWidth: "66ch" }}>
+              <b style={{ fontWeight: 600 }}>Próximo passo.</b> {c.priority.recommended_next_step}
             </p>
           ) : null}
         </section>
       ) : null}
 
       {c.recommendations && c.recommendations.length > 0 ? (
-        <section className="card stack-sm">
-          <div className="section-head"><span className="section-num">03</span><h2>Recomendações NVIDIA</h2></div>
-          <p style={{ fontSize: 13.5, color: "var(--ink-muted)", maxWidth: "64ch" }}>
+        <section className="section">
+          <h2>O que oferecer</h2>
+          <p className="lede" style={{ fontSize: 15, marginBottom: 8 }}>
             A tecnologia sai do eixo mais fraco, não de uma regra por setor — e nenhuma
-            recomendação existe sem citação da base de conhecimento.
+            recomendação existe sem citação da base NVIDIA.
           </p>
           {c.recommendations.map((r, i) => (
-            <article key={i} className="stack-sm" style={{
-              borderTop: "1px solid var(--rule)", paddingTop: 16, marginTop: i ? 4 : 8,
+            <article key={i} style={{
+              borderTop: "1px solid var(--rule)", paddingTop: 20, marginTop: 20,
             }}>
-              <div style={{ display: "flex", gap: 12, alignItems: "baseline", flexWrap: "wrap" }}>
-                <h3>{r.technology}</h3>
-                <span style={{ fontSize: 12.5, color: "var(--ink-muted)" }}>
-                  endereça {AXIS_LABEL[r.addresses_axis] ?? r.addresses_axis} ·
-                  prioridade {r.priority} · complexidade {r.complexity}
-                </span>
+              <h3 style={{ fontSize: 19, fontVariationSettings: '"wdth" 108' }}>{r.technology}</h3>
+              <p className="note" style={{ marginTop: 4 }}>
+                endereça {AXIS_LABEL[r.addresses_axis] ?? r.addresses_axis}, prioridade{" "}
+                {r.priority}, complexidade {r.complexity}
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14 }}>
+                <p style={{ maxWidth: "66ch" }}>
+                  <b style={{ fontWeight: 600 }}>Técnico.</b> {r.technical_rationale}
+                </p>
+                <p style={{ maxWidth: "66ch" }}>
+                  <b style={{ fontWeight: 600 }}>Negócio.</b> {r.business_rationale}
+                </p>
+                <p style={{ maxWidth: "66ch" }}>
+                  <b style={{ fontWeight: 600 }}>Próxima ação.</b> {r.next_action}
+                </p>
               </div>
-              <p style={{ fontSize: 14.5 }}><strong>Técnico.</strong> {r.technical_rationale}</p>
-              <p style={{ fontSize: 14.5 }}><strong>Negócio.</strong> {r.business_rationale}</p>
-              <p style={{ fontSize: 14.5 }}><strong>Próxima ação.</strong> {r.next_action}</p>
               {r.kb_citations && r.kb_citations.length > 0 ? (
-                <div className="evidence">
-                  <span className="label" style={{ display: "block", marginBottom: 4 }}>
-                    Fontes na base NVIDIA
-                  </span>
+                <div className="evidence" style={{ marginTop: 14 }}>
                   {r.kb_citations.map((k, j) => (
-                    <div key={j} style={{ marginTop: j ? 8 : 0 }}>
+                    <div key={j} style={{ marginTop: j ? 10 : 0 }}>
                       <a href={k.source_url} target="_blank" rel="noopener noreferrer">
-                        {k.source_title ?? new URL(k.source_url).hostname.replace(/^www\./, "")}
+                        {k.source_title ?? hostname(k.source_url)}
                       </a>
-                      <blockquote>“{k.text.slice(0, 240)}{k.text.length > 240 ? "…" : ""}”</blockquote>
+                      <blockquote>
+                        “{k.text.slice(0, 240)}{k.text.length > 240 ? "…" : ""}”
+                      </blockquote>
                     </div>
                   ))}
                 </div>
@@ -181,11 +182,20 @@ export default function EmpresaPage({ params }: { params: Promise<{ id: string }
 
       {briefing ? (
         <p>
-          <a className="btn" href={`/api${briefing.markdown_url}`} target="_blank" rel="noopener noreferrer">
-            Abrir briefing completo (markdown)
+          <a className="link-fwd" href={`/api${briefing.markdown_url}`}
+             target="_blank" rel="noopener noreferrer">
+            Abrir o briefing completo
           </a>
         </p>
       ) : null}
     </div>
   );
+}
+
+function hostname(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
 }
