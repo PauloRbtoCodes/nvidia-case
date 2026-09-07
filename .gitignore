@@ -15,12 +15,17 @@ __pycache__/
 .claude/
 CLAUDE.md
 
-# Dados coletados e caches (não versionar scraping bruto)
+# Dados coletados e caches (não versionar: são gerados, não fonte)
 data/cache/
 data/raw/
 data/bm25_index/
+data/embed_cache/
 *.db
 *.sqlite3
+
+# Saída do sistema — briefings sobre empresas reais não vão para o repo público.
+# São gerados ao vivo pela demo; versioná-los publicaria análise de terceiros.
+data/briefings/
 
 # Node / Next.js
 node_modules/
@@ -41,3 +46,4 @@ test-results/
 web/node_modules/
 web/.next/
 web/next-env.d.ts
+web/*.tsbuildinfo
