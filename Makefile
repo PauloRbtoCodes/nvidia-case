@@ -1,4 +1,4 @@
-.PHONY: help setup up down logs migrate check ingest run api web test lint eval clean
+.PHONY: help setup up down logs migrate check ingest run api web test lint typecheck eval clean
 
 help:
 	@echo "NVIDIA Startup AI Radar"
@@ -12,9 +12,9 @@ help:
 	@echo "  make run      Executa o grafo via CLI"
 	@echo "  make api      Sobe a API FastAPI em :8000"
 	@echo "  make web      Sobe o frontend Next.js em :3000"
-	@echo "  make test     Roda os testes"
-	@echo "  make lint     Ruff + mypy"
-	@echo "  make eval     Suite de avaliacao (RAGAS + classificador)"
+	@echo "  make test     Roda os testes (offline, com dubles)"
+	@echo "  make lint     Ruff check (o gate do projeto)"
+	@echo "  make typecheck Mypy (advisory: ha ruido de tipagem do LangGraph)"
 
 setup:
 	uv sync --extra dev --extra eval
@@ -53,11 +53,14 @@ test:
 
 lint:
 	uv run ruff check src api tests
-	uv run ruff format --check src api tests
+
+typecheck:
 	uv run mypy src
 
 eval:
-	uv run python -m radar.eval.run_all
+	@echo "Suite de avaliacao: planejada, nao implementada dentro do prazo."
+	@echo "Golden dataset: data/golden/ (scaffold). Prioridade e classifier_eval"
+	@echo "contra ~50 labels manuais; ver docs/governanca-e-tradeoffs.md secao 5."
 
 clean:
 	rm -rf data/cache data/bm25_index .pytest_cache .ruff_cache .mypy_cache

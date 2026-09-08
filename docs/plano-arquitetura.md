@@ -1,7 +1,10 @@
 # NVIDIA Startup AI Radar — Plano de Arquitetura
 
-> Documento vivo. Toda decisão relevante vira um ADR em `docs/adr/`.
-> Última revisão: 2026-08-13
+> Documento de planejamento, escrito no início do projeto.
+> Última revisão do corpo: 2026-08-13. As decisões que ele deixou em aberto — e as
+> que o ambiente forçou a mudar (modelos NIM, rerank) — estão resolvidas na
+> **§13**, no fim. Para o estado atual do produto e os trade-offs de escopo, ver
+> [`governanca-e-tradeoffs.md`](governanca-e-tradeoffs.md).
 
 ---
 
@@ -290,9 +293,22 @@ Commits diários com escopo pequeno. Cada decisão de arquitetura vira um ADR no
 
 ---
 
-## 13. Decisões ainda abertas
+## 13. Decisões, agora fechadas
 
-1. Search API definitiva: **Tavily** (melhor para agentes, free tier generoso) ou **Brave** (mais barato em escala).
-2. Modelo NIM para os agentes: `llama-3.3-70b-instruct` (mais forte em extração estruturada) vs `nemotron` (narrativa NVIDIA mais coesa).
-3. Escopo geográfico e setorial do primeiro lote de startups.
-4. Se o radar temporal (re-scraping agendado + alertas) entra como extensão caso sobre tempo na semana 4.
+Este documento é de 2026-08-13. As quatro decisões que ele deixou abertas foram
+resolvidas ao longo do mês:
+
+1. **Search API: Tavily.** Free tier mais generoso e feito para agentes. Brave
+   ficaria mais barato só em escala que este projeto não tem.
+2. **Modelo NIM: Nemotron.** Decisão forçada pelo ambiente — em 2026-09-09
+   `llama-3.3-70b` perdeu o endpoint gratuito e `llama-3.1-8b` /
+   `nv-embedqa-e5-v5` foram deprecados. Nemotron 3 Super 120B no raciocínio,
+   Nemotron 3.5 Lightning 30B nas tarefas mecânicas. Trade-off aceito: o
+   raciocínio explícito do Nemotron precisa ser desligado (`nim_disable_thinking`),
+   senão vaza para dentro de `content` e quebra a saída estruturada.
+3. **Escopo do primeiro lote:** startups brasileiras de IA em saúde — setor com
+   dado regulado (bom para o eixo de dados proprietários) e com nomes públicos
+   suficientes para a descoberta funcionar.
+4. **O radar temporal entrou** — não como "re-scraping agendado", mas como
+   comparador entre execuções (`scoring/delta.py` + nó `compare`). É o que honra
+   o nome do produto. Ver `docs/governanca-e-tradeoffs.md` §3.1 e §10.5.

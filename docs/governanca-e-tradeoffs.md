@@ -2,7 +2,7 @@
 
 - **Status:** vigente
 - **Data:** 2026-09-09
-- **Relacionado:** ADR 0001–0005, `docs/plano-arquitetura.md`, `CLAUDE.md`
+- **Relacionado:** ADR 0001–0005, [`plano-arquitetura.md`](plano-arquitetura.md)
 
 > Os ADRs registram decisões **técnicas**: por que Qdrant, por que score e confiança
 > separados. Este documento registra as decisões de **produto e escopo** — a quem o
@@ -78,8 +78,10 @@ não se sabe se o radar varre o ecossistema ou uma esquina dele.
 
 ### 2.6 Nada rodou contra API real — **crítico, e já conhecido**
 
-Registrado no `CLAUDE.md` desde 14/08. Em termos de produto é o risco número um: um
+Conhecido e registrado desde 14/08. Em termos de produto é o risco número um: um
 sistema que não roda ao vivo não convence, por melhor que seja a arquitetura.
+(Estado atual em §13: a infra subiu, a persistência foi validada contra Postgres
+real; faltam as três chaves de API para o caminho completo.)
 
 ### 2.7 Risco de leitura "isso é uma planilha cara" — **transversal**
 
@@ -436,8 +438,8 @@ verdade. Três achados, dois corrigidos aqui e um deixado como trabalho futuro.
 **dict hardcoded** — o YAML não participava da conta.
 
 Consequência: **recalibrar `weights.yaml` não mudava score nenhum**, contra a
-promessa registrada no `CLAUDE.md` ("premissas numéricas vivem em `weights.yaml`,
-versionadas — recalibrar não pode exigir re-scraping nem corromper histórico").
+convenção do projeto ("premissas numéricas vivem em `weights.yaml`, versionadas —
+recalibrar não pode exigir re-scraping nem corromper histórico").
 
 E pior que não funcionar: `DefensibilityScore.weights_version` grava a versão do
 YAML. Depois de uma recalibração, o banco registraria `weights_version: "0.2.0"`
@@ -529,8 +531,8 @@ vez, costuma existir duas. Encontrou um padrão **irmão, não idêntico**.
 nome `capacidade >= 0.5`.
 
 Não é o mesmo bug da camada 1 (espelho divergente) e sim outro: **premissa de
-calibração que nunca esteve no arquivo de calibração**, contra a regra do
-`CLAUDE.md`. O efeito prático é o mesmo, porém: a calibração da semana 4 quer
+calibração que nunca esteve no arquivo de calibração**, contra a mesma convenção.
+O efeito prático é o mesmo, porém: a calibração da semana 4 quer
 ajustar exatamente esses cortes, e sem eles no YAML isso exigiria mudança de
 código, ficaria fora de `weights_version`, e produziria histórico incomparável
 sem nada registrando a diferença entre as duas escalas.
