@@ -312,6 +312,13 @@ h3 { font-size: 16.5px; letter-spacing: -.005em; }
   text-underline-offset: 3px; text-decoration-thickness: 1.5px;
 }
 
+.btn-ghost {
+  font: inherit; font-weight: 600; font-size: 15px; padding: 9px 16px;
+  border-radius: var(--r-control); cursor: pointer;
+  background: transparent; color: var(--ink); border: 1px solid var(--rule-strong);
+}
+.btn-ghost:hover { border-color: var(--ink-soft); }
+
 /* ------------------------------------------------------------------- log */
 .log { display: flex; flex-direction: column; max-height: 380px; overflow-y: auto; }
 .log-line {
@@ -346,4 +353,42 @@ h3 { font-size: 16.5px; letter-spacing: -.005em; }
   .entry-readings { grid-column: 2; padding-top: 12px; }
   .log-line { grid-template-columns: 1fr; }
   .log-line p { grid-column: 1; }
+}
+
+/* --------------------------------------------------------------- impressão */
+/* O PDF sai pelo próprio navegador: nada de biblioteca HTML→PDF, que exigiria
+   cairo/pango no sistema. O que a tela mostra é o que o PDF leva — inclusive as
+   URLs de evidência, que na tela são clicáveis e no papel precisam estar
+   escritas por extenso, senão o relatório perde exatamente o que o sustenta. */
+@media print {
+  @page { margin: 16mm 14mm; }
+
+  :root { --paper: #fff; --sheet: #fff; }
+
+  html, body { background: #fff; color: #000; }
+
+  .masthead, .tabs, .no-print, .btn, .btn-ghost { display: none !important; }
+
+  .shell { max-width: none; padding: 0; }
+
+  .stack { gap: 22px; }
+
+  .section { break-inside: avoid; page-break-inside: avoid; }
+
+  h1 { font-size: 22pt; }
+  h2 { font-size: 13pt; }
+  body { font-size: 10.5pt; }
+
+  a { color: #000; text-decoration: underline; }
+
+  /* A fonte por extenso: no papel, "leia mais" sem URL é afirmação sem lastro. */
+  .evidence a[href]::after {
+    content: " (" attr(href) ")";
+    font-size: 8.5pt; color: #444; word-break: break-all;
+  }
+
+  blockquote { break-inside: avoid; page-break-inside: avoid; }
+
+  .gauge-track { border: 1px solid #999; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .gauge-fill  { background: #000 !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 }

@@ -181,11 +181,14 @@ export default function EmpresaPage({ params }: { params: Promise<{ id: string }
       ) : null}
 
       {briefing ? (
-        <p>
+        <p style={{ display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
           <a className="link-fwd" href={`/api${briefing.markdown_url}`}
              target="_blank" rel="noopener noreferrer">
             Abrir o briefing completo
           </a>
+          <button type="button" className="btn-ghost no-print" onClick={() => window.print()}>
+            Exportar PDF
+          </button>
         </p>
       ) : null}
     </div>

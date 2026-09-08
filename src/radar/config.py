@@ -22,15 +22,27 @@ class Settings(BaseSettings):
     nvidia_api_key: str = Field(default="")
     nim_base_url: str = "https://integrate.api.nvidia.com/v1"
     nim_chat_model: str = "nvidia/nemotron-3-super-120b-a12b"
-    nim_fast_model: str = "nvidia/nemotron-3.5-lightning-30b-a3b"
-    """Modelo pequeno para tarefas onde o erro é barato e detectável adiante
-    (search planner, evidence validator). A quota gratuita do NIM é limitada, e
-    gastar o modelo grande em planejamento de query desperdiça o orçamento das
-    tarefas que realmente precisam de raciocínio.
+    nim_fast_model: str = "nvidia/nemotron-3-super-120b-a12b"
+    """Modelo das tarefas onde o erro é barato e detectável adiante (search
+    planner, evidence validator).
+
+    Aponta para o mesmo modelo do `nim_chat_model` desde 2026-09-10, e o motivo
+    contraria a intuição: medido contra a API real, o `nemotron-3.5-lightning-30b`
+    responde em 34–50s (com timeout em uma tentativa de três) enquanto o
+    `nemotron-3-super-120b` responde em 0.7–4.8s para o mesmo prompt de 16 tokens.
+    O modelo "pequeno" não está mais quente no endpoint gratuito; o "grande" está.
+
+    O efeito era grave porque o planner é a PRIMEIRA chamada do grafo: a execução
+    inteira ficava presa antes de descobrir a primeira empresa. Trocar por latência
+    medida, não por tamanho de parâmetro, derrubou o tempo até o primeiro resultado.
 
     Nemotron e não Llama: verificado em 2026-09-09, `llama-3.3-70b` perdeu o
     endpoint gratuito e `llama-3.1-8b` foi deprecado. Os substitutos gratuitos são
-    todos Nemotron — num case para a NVIDIA, também é a narrativa mais coerente."""
+    todos Nemotron — num case para a NVIDIA, também é a narrativa mais coerente.
+
+    Mantido como campo separado de propósito: quando o endpoint do lightning
+    voltar a esquentar, isto volta a ser uma linha de configuração, não uma
+    refatoração."""
 
     nim_embed_model: str = "nvidia/nemotron-3-embed-1b"
 
