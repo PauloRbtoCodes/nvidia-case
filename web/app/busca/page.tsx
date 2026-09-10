@@ -123,7 +123,7 @@ export default function BuscaPage() {
     const es = new EventSource(`/api/searches/${id}/stream`);
     esRef.current = es;
 
-    es.onmessage = (ev) => {
+    const tratar = (ev: MessageEvent) => {
       try {
         const d = JSON.parse(ev.data);
         const node = String(d.node ?? d.event ?? d.type ?? "evento");
@@ -145,6 +145,17 @@ export default function BuscaPage() {
         /* keep-alive do SSE não é JSON — ignorar é o comportamento correto */
       }
     };
+
+    // `onmessage` **não** cobre estes: o backend nomeia cada evento
+    // (`event: status`, `event: node`, `event: error`) e, por especificação,
+    // `onmessage` só dispara para evento sem nome ou chamado `message`. Com só
+    // `onmessage`, a conexão abria, o servidor mandava tudo e a tela não via
+    // nada — ficava em "aguardando o primeiro passo" com o cronômetro correndo.
+    // Os nomes espelham `RunEvent.type` em `api/runs.py`.
+    for (const tipo of ["status", "node", "error"]) {
+      es.addEventListener(tipo, tratar as EventListener);
+    }
+    es.onmessage = tratar;
 
     es.onerror = async () => {
       es.close();
