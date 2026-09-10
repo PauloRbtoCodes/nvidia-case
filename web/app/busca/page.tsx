@@ -146,12 +146,33 @@ export default function BuscaPage() {
       }
     };
 
-    es.onerror = () => {
-      // A conexão cai por rede instável mesmo com a execução viva no backend —
-      // o histórico está seguro lá (`SearchRun.events`), então a resposta certa
-      // é tentar de novo, não desistir e mostrar erro para o usuário.
+    es.onerror = async () => {
       es.close();
       esRef.current = null;
+
+      // Duas causas bem diferentes chegam aqui pelo mesmo evento: rede
+      // instável (a execução segue viva no backend, `SearchRun.events` guarda
+      // o histórico) ou a API foi reiniciada e **esqueceu a execução** — o
+      // registro é só em memória, de propósito (ver `api/runs.py`). Sem essa
+      // checagem, o segundo caso reconectava para sempre e a tela ficava
+      // "rodando" indefinidamente numa execução que o servidor não conhece
+      // mais.
+      try {
+        const status = await fetch(`/api/searches/${id}`, { cache: "no-store" });
+        if (status.status === 404) {
+          setErro(
+            "Esta execução não existe mais no servidor (a API foi reiniciada " +
+            "no meio do caminho). Inicie uma nova varredura."
+          );
+          setRodando(false);
+          setRunId(null);
+          salvarRunAtiva(null);
+          return;
+        }
+      } catch {
+        /* API fora do ar agora — trata como instabilidade e tenta de novo abaixo */
+      }
+
       window.setTimeout(() => {
         if (document.visibilityState === "visible") abrirStream(id);
       }, 2000);
