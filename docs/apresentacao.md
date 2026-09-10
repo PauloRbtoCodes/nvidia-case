@@ -211,16 +211,24 @@
 **No slide:** só o título *"Demo — descobrir e diagnosticar"* e o print da tela de varredura em segundo plano.
 
 **O que fazer:**
-1. Abrir `/varredura`, digitar *"startups brasileiras de IA para saúde"*, 5 empresas.
-2. Apontar o **stream ao vivo**: cada linha é um passo real acontecendo — planejar, descobrir, coletar, extrair, auditar, pontuar.
-3. Enquanto roda, dizer a frase de baixo. Não esperar terminar — cortar para o slide 6 quando as primeiras empresas aparecerem.
+1. Abrir `localhost:3100/busca`, digitar *"startups brasileiras de IA para saúde"*, **3 empresas** (não 5 — cada empresa custa ~1min no passo de recomendação, e o palco não tem esse tempo).
+2. Apontar a **trilha de fases** no topo enquanto ela avança: Descobrir → Levantar lastro → Diagnosticar → Decidir. Ela é o mesmo desenho do slide 4, agora acontecendo.
+3. Apontar o **log ao vivo**: cada linha é um nó do grafo terminando, com o nome da empresa e o que aquele passo produziu — "4 páginas coletadas", "evidência insuficiente, voltando a coletar", "score 50 · eixo mais fraco: dados proprietários".
+4. **A linha de ouro, se aparecer:** *"Auditando evidências — evidência insuficiente, voltando a coletar"*. É o ciclo de re-coleta do slide 4 visível ao vivo. Se aparecer, pare e mostre.
+5. Não esperar terminar — cortar para o slide 6 assim que a primeira empresa passar de "Diagnosticar".
 
 **Roteiro:**
 > Descrevo o setor como falaria com um colega. O sistema traduz isso em buscas
 > reais, filtra o que é notícia ou diretório — só site de empresa passa — e
-> começa a diagnosticar. Cada linha aqui é um passo real acontecendo agora, ao
-> vivo, não uma barra de progresso decorativa. Isso é o Entregável 1, 2 e 3
-> rodando juntos.
+> começa a diagnosticar.
+>
+> E o que vocês estão vendo aqui não é uma barra de progresso decorativa: cada
+> linha é um nó do grafo terminando de verdade, com o que ele produziu. Repare
+> nessa linha — "evidência insuficiente, voltando a coletar". Aquele ciclo que
+> eu mostrei no diagrama há um minuto está acontecendo agora, nesta empresa: o
+> sistema achou que não tinha lastro suficiente e voltou para buscar mais.
+>
+> Isso é o Entregável 1, 2 e 3 rodando juntos.
 
 ---
 
@@ -287,32 +295,35 @@
 
 ## Slide 8 — O que aprendi (0:30)
 
-**No slide — três linhas, cada uma com a lição em negócio, não só em código:**
-- **Meça, não presuma — o modelo "rápido" era 40× mais lento.** Eu usava um modelo pequeno nas tarefas baratas, por lógica de custo. Cronometrando contra a API real: o pequeno levava 34–50s (com timeout), o grande levava 0,7–4,8s no mesmo prompt. Como a tarefa afetada era a primeira do fluxo, a varredura inteira parecia travada. **Uma linha de configuração** resolveu — porque a arquitetura de portas do slide 3 é o que torna isso uma linha.
-- **Uma trilha de auditoria que mente é pior que nenhuma trilha.** Encontrei um bug real em que a versão dos pesos gravada não era a versão usada — silenciosa, e por isso mais perigosa que um erro que quebra na hora.
-- **Prompt é instrução, não garantia.** O modelo obedecia o formato pedido e ainda assim quebrava — raciocínio vazando no campo errado, resposta cortada no meio. Por isso o grounding do slide 4 é verificado em código: não dá pra confiar cegamente no que o modelo promete fazer.
+**No slide — três decisões de arquitetura que eu levaria para o próximo projeto:**
+- **Projetar para falha parcial muda o desenho inteiro.** Assumir que *alguma* empresa vai falhar — site fora do ar, extrator quebrando — leva ao paralelo com isolamento: cada uma com estado e orçamento de retry próprios. Uma fila simples entrega zero quando o primeiro item quebra; este desenho entrega nove de dez.
+- **Separar quem julga de quem calcula.** A IA pontua os eixos (leitura, subjetivo); o código calcula TCO, prioridade e o diff (exato, auditável). Misturar os dois é o que produz número inventado exatamente onde se prometeu rastreabilidade.
+- **Desacoplar não é elegância, é opção de troca.** Com todo acesso externo atrás de uma porta, trocar modelo, busca ou banco vetorial é configuração — não refatoração. Num campo onde o provedor certo muda a cada trimestre, essa é a decisão que envelhece melhor.
 
 **Roteiro:**
-> Três lições, e as três mudam como eu penso sobre construir isso em produção,
-> não só sobre construir isso em uma semana de prazo.
+> Três decisões de arquitetura que eu levaria para o próximo projeto — e as três
+> vieram de errar antes de acertar.
 >
-> A primeira é sobre isolar as peças do sistema: não fiz isso por disciplina de
-> engenharia, fiz por controle de custo. Pude ajustar a lógica de pontuação
-> centenas de vezes sem gastar um crédito de API, e trocar de provedor de busca
-> sem tocar no motor de recomendação. Numa versão que escala pra centenas de
-> startups por semana, essa mesma decisão é o que separa um custo previsível de
-> um custo que explode a cada mudança.
+> A primeira: projetar assumindo que **alguma coisa vai falhar** muda o desenho
+> inteiro. O óbvio era uma fila: pega empresa, processa, próxima. Mas o trabalho
+> é lento e falha com frequência — site fora do ar, página que derruba o
+> extrator. Numa fila, o primeiro erro leva o lote junto. Assumindo a falha
+> desde o começo, o desenho vira paralelo com isolamento: cada empresa com seu
+> estado e seu orçamento de tentativas. A diferença prática, num lote de dez, é
+> entregar nove em vez de zero.
 >
-> A segunda é que uma trilha de auditoria que mente é pior que não ter
-> nenhuma — um bug real em que o número da versão dos pesos gravado não batia
-> com o usado. Um sistema que erra silenciosamente é mais perigoso que um que
-> erra visivelmente, porque ninguém vai checar o que parece estar certo.
+> A segunda, e a mais importante do projeto: **separar quem julga de quem
+> calcula.** Decidir se um dataset descrito num blog é fosso competitivo é
+> leitura — é o que um modelo faz bem. Calcular quanto custa migrar, ou em que
+> ordem ligar para a carteira, é aritmética — e tem que ser código, senão você
+> tem um número inventado exatamente onde prometeu auditabilidade. Sistema de IA
+> bom não é o que usa IA em tudo; é o que sabe onde não usar.
 >
-> E a terceira é que prompt é instrução, não garantia: o modelo obedecia o
-> formato pedido e ainda assim quebrava, por raciocínio vazado no campo errado
-> ou resposta cortada no meio. É essa desconfiança, ganha na marra, que
-> justifica o design do slide 4: verificar grounding em código, não confiar na
-> promessa do prompt.
+> A terceira: **desacoplar não é elegância, é opção de troca.** Com todo acesso
+> externo atrás de uma porta, trocar de modelo ou de provedor de busca é
+> configuração, não refatoração — e eu usei isso mais de uma vez durante o
+> desenvolvimento. Num campo em que o provedor certo muda a cada trimestre, essa
+> é a decisão que envelhece melhor.
 
 ---
 
@@ -352,9 +363,19 @@ make migrate
 make check         # confirma as 3 chaves e a conectividade
 make ingest        # base NVIDIA no Qdrant (precisa da NVIDIA_API_KEY)
 make api           # :8000
-make web           # :3000
+cd web && npm run dev -- -p 3100    # a demo roda em :3100
 ```
 
+Telas: **`localhost:3100/busca`** (Demo 1) · **`localhost:3100/fila`** (Demo 2).
+
+- **Abra o navegador com Ctrl+Shift+R na primeira vez.** Bundle antigo em cache
+  já custou meia hora de depuração numa sessão — a tela abria, o stream
+  conectava e nenhum evento aparecia, porque o JavaScript carregado era o de
+  antes da correção.
+- **Não reinicie a API depois de começar a preparar a demo.** O registro de
+  execuções vive na memória do processo (decisão registrada em `api/runs.py`):
+  reiniciar apaga toda varredura em andamento, e a tela fica tentando
+  reconectar a uma execução que o servidor não conhece mais.
 - Rode **uma varredura de verdade antes** para a fila já ter empresas — a Demo 2
   precisa de dados, e rodar a Demo 1 até o fim consome tempo demais no palco.
 - Rode a **mesma varredura duas vezes** (com alguns minutos de intervalo) para a
