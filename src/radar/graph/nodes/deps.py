@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from typing import Any, Protocol, TypeVar
 
+import structlog
 from pydantic import BaseModel
 
 from radar.llm.client import NIMClient
@@ -34,6 +35,8 @@ from radar.rag.rerank import Reranker
 from radar.scoring.weights import ScoringWeights, get_weights
 from radar.scraping.fetch import HttpFetcher
 from radar.scraping.search import TavilySearch
+
+log = structlog.get_logger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -96,6 +99,28 @@ class NodeDeps:
     """Histórico de score para o nó `compare`. `None` sem banco — o nó não emite diff."""
     weights: ScoringWeights = field(default_factory=get_weights)
     clock: Callable[[], date] = _hoje
+
+    on_progress: Callable[[str, str | None, str | None], None] | None = None
+    """Porta de progresso: `(nó, empresa, detalhe)`, chamada a cada passo do subgrafo.
+
+    Existe porque o subgrafo roda dentro de um nó do grafo externo (ver
+    `build.make_process_company`), e não plugado como nó: do lado de fora, uma
+    empresa inteira é **um** evento, e a tela ficava dois a três minutos sem
+    nenhum sinal de vida enquanto nove nós rodavam invisíveis.
+
+    É porta e não import direto do registro de execuções pelo motivo de sempre:
+    `graph/` não conhece `api/`. Quem estiver rodando sem interface — teste,
+    script, CLI — deixa `None` e o grafo não paga nada por isso.
+    """
+
+    def progress(self, node: str, company: str | None = None, detail: str | None = None) -> None:
+        """Emite progresso quando há quem ouça. Falha de UI nunca derruba o grafo."""
+        if self.on_progress is None:
+            return
+        try:
+            self.on_progress(node, company, detail)
+        except Exception:  # noqa: BLE001 - progresso é acessório, nunca crítico
+            log.debug("progresso_falhou", node=node, company=company)
 
     @property
     def today(self) -> str:

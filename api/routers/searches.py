@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from dataclasses import replace
 from typing import Any
 
 import structlog
@@ -93,6 +94,22 @@ async def executar_busca(run: SearchRun, deps: NodeDeps) -> None:
     """Roda o grafo empurrando progresso para o stream da execução."""
     run.status = RunStatus.EXECUTANDO
     run.emit(RunEvent(type="status", detail=RunStatus.EXECUTANDO.value))
+
+    def progresso(node: str, company: str | None, detail: str | None) -> None:
+        """Passos de dentro do subgrafo, que o stream do grafo externo não vê."""
+        run.emit(
+            RunEvent(
+                type="node",
+                node=ROTULOS.get(node, node),
+                company=company,
+                detail=detail,
+            )
+        )
+
+    # Cópia por execução: `deps` é injetado pelo processo e compartilhado entre
+    # requisições. Escrever o callback no objeto compartilhado mandaria o
+    # progresso de uma varredura para o stream de outra.
+    deps = replace(deps, on_progress=progresso)
 
     grafo = build_radar_graph(deps)
     estado: dict[str, Any] = {}

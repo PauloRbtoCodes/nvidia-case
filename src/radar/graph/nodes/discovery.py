@@ -37,6 +37,7 @@ AGGREGATOR_HINTS: tuple[str, ...] = (
     "abstartups.com.br",
     "crunchbase.com",
     "cubo.network",
+    "cubo.itau",
     "startups.com.br",
     "100openstartups.com",
     "startse.com",
@@ -160,9 +161,45 @@ def _caminho_de_conteudo(url: str) -> bool:
     return any(re.fullmatch(r"(19|20)\d{2}", s) for s in segmentos)
 
 
+#: "8 Startups de IA Que...", "10 Ferramentas de..." — listicle sem estar na
+#: lista de marcadores porque o número muda a cada matéria; a forma não muda.
+LISTICLE_NUMERICO = re.compile(r"^\d{1,3}\s+\S")
+
+
 def _titulo_de_manchete(titulo: str) -> bool:
     baixo = f" {titulo.lower().strip()} "
+    if LISTICLE_NUMERICO.match(titulo.strip()):
+        return True
     return any(marca in baixo for marca in TITULO_DE_MANCHETE)
+
+
+#: Preposições que costuram um sintagma-assunto ("Inteligência artificial na
+#: saúde", "Startups de IA no agronegócio") em vez de um nome de marca. Nome de
+#: empresa é curto e não se apoia em preposição para fazer sentido; título de
+#: categoria de portal é, estruturalmente, uma frase.
+PREPOSICOES_DE_ASSUNTO: tuple[str, ...] = (
+    " na ", " no ", " nas ", " nos ", " de ", " do ", " da ", " dos ", " das ",
+    " em ", " para ", " com ", " sem ", " sobre ", " entre ", " por ",
+)
+
+
+def _titulo_de_assunto(titulo: str) -> bool:
+    """Página de categoria/editorial ("Inteligência artificial na saúde").
+
+    Passou pelo filtro de manchete (sem verbo) e pelo de agregador (domínio
+    desconhecido), mas continua sendo o nome de um tema, não de uma empresa:
+    nenhuma palavra é capitalizada além da primeira — nome próprio de startup
+    preserva capitalização (`NeuralMed`, `Voa Health`) mesmo em título de busca.
+    Exige preposição de amarração para não recusar nomes legítimos de duas
+    palavras que por acaso começam em minúscula na fonte.
+    """
+    baixo = f" {titulo.lower().strip()} "
+    tem_preposicao = any(prep in baixo for prep in PREPOSICOES_DE_ASSUNTO)
+    if not tem_preposicao:
+        return False
+    palavras = titulo.split()
+    maiusculas_alem_da_primeira = sum(1 for p in palavras[1:] if p[:1].isupper())
+    return maiusculas_alem_da_primeira == 0
 
 
 def _parece_empresa(candidate: SearchCandidate) -> tuple[bool, str]:
@@ -186,6 +223,8 @@ def _parece_empresa(candidate: SearchCandidate) -> tuple[bool, str]:
         return False, "caminho_de_conteudo"
     if _titulo_de_manchete(candidate.title):
         return False, "titulo_de_manchete"
+    if _titulo_de_assunto(candidate.title):
+        return False, "titulo_de_assunto"
     return True, ""
 
 

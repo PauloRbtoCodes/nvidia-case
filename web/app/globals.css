@@ -319,6 +319,18 @@ h3 { font-size: 16.5px; letter-spacing: -.005em; }
 }
 .btn-ghost:hover { border-color: var(--ink-soft); }
 
+@keyframes radar-pulso {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+@keyframes radar-pulso-trilha {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+@media (prefers-reduced-motion: reduce) {
+  [style*="radar-pulso"] { animation: none !important; }
+}
+
 /* ------------------------------------------------------------------- log */
 .log { display: flex; flex-direction: column; max-height: 380px; overflow-y: auto; }
 .log-line {

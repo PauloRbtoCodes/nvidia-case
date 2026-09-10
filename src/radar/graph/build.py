@@ -177,6 +177,40 @@ def fan_out_companies(state: RadarState) -> Any:
     return envios
 
 
+def _detalhe_do_passo(node: str, update: dict[str, Any]) -> str | None:
+    """Um fato curto sobre o que o nó acabou de produzir, para o progresso na tela.
+
+    Só os nós cujo resultado é legível numa linha. Onde não há fato curto e
+    honesto a dar, devolve `None` e a tela mostra apenas o rótulo do passo —
+    melhor que inventar uma frase de preenchimento.
+    """
+    if not isinstance(update, dict):
+        return None
+
+    if node == "collect":
+        paginas = update.get("raw_pages") or []
+        return f"{len(paginas)} página(s) coletada(s)" if paginas else None
+    if node == "validate":
+        if update.get("requires_recollection"):
+            return "evidência insuficiente, voltando a coletar"
+        return "evidência suficiente"
+    if node == "classify":
+        classificacao = update.get("classification")
+        return classificacao.maturity.value if classificacao is not None else None
+    if node == "score":
+        score = update.get("defensibility")
+        if score is not None:
+            return f"score {score.total} · eixo mais fraco: {score.weakest_axis.value}"
+        return None
+    if node == "rag":
+        chunks = update.get("rag_chunks") or []
+        return f"{len(chunks)} trecho(s) da base NVIDIA"
+    if node == "recommend":
+        recomendacoes = update.get("recommendations") or []
+        return f"{len(recomendacoes)} recomendação(ões) com citação verificada"
+    return None
+
+
 def make_process_company(deps: NodeDeps) -> Any:
     """Executa o subgrafo e traduz sua saída para o estado do lote."""
     subgrafo = build_company_graph(deps)
@@ -184,7 +218,22 @@ def make_process_company(deps: NodeDeps) -> Any:
     async def process_company(state: CompanyState) -> dict[str, Any]:
         nome = state.get("company_name", "?")
         try:
-            resultado: CompanyState = await subgrafo.ainvoke(state)
+            # `astream` com os dois modos em vez de `ainvoke` porque o subgrafo
+            # roda *dentro* deste nó: do grafo externo, uma empresa é um evento
+            # só, e a tela ficava minutos em silêncio enquanto nove nós rodavam.
+            # `updates` dá o nome do nó que terminou; `values` dá o estado
+            # acumulado — e o último `values` é exatamente o que `ainvoke`
+            # devolveria, então os reducers do estado continuam sendo os do
+            # LangGraph, não uma reimplementação local.
+            resultado: CompanyState = {}
+            async for modo, dado in subgrafo.astream(
+                state, stream_mode=["updates", "values"]
+            ):
+                if modo == "values":
+                    resultado = dado
+                    continue
+                for node, update in (dado or {}).items():
+                    deps.progress(node, nome, _detalhe_do_passo(node, update))
         except Exception as exc:  # noqa: BLE001 - ver docstring do módulo
             log.warning("subgrafo_falhou", empresa=nome, erro=str(exc)[:300])
             return {"failures": [falha("process_company", exc, company=nome)]}

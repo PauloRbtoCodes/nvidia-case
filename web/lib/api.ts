@@ -211,4 +211,5 @@ export const api = {
     }),
   saude: () => json<{ status: string; [k: string]: unknown }>("/health"),
   briefing: (companyId: string) => json<BriefingOut>(`/companies/${companyId}/briefing`),
+  cancelarBusca: (runId: string) => json<void>(`/searches/${runId}`, { method: "DELETE" }),
 };

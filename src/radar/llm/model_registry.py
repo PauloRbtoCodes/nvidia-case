@@ -17,7 +17,13 @@ from radar.config import Settings, get_settings
 
 #: Fallback do modelo pequeno. A fonte real é `Settings.nim_fast_model`
 #: (variável `NIM_FAST_MODEL`); este valor só entra se a configuração vier vazia.
-DEFAULT_FAST_MODEL = "nvidia/nemotron-3.5-lightning-30b-a3b"
+#: Espelha o default de `Settings.nim_fast_model` em `radar/config.py` —
+#: mesmo motivo lá: medido contra a API real em 2026-09-10, o "lightning"
+#: respondia em 34-50s (com timeout) contra 0.7-4.8s do "super" no mesmo
+#: prompt, e por ser a primeira chamada do grafo isso travava a varredura
+#: inteira. Os dois lugares precisam mudar juntos até o endpoint do lightning
+#: voltar a responder rápido.
+DEFAULT_FAST_MODEL = "nvidia/nemotron-3-super-120b-a12b"
 
 
 class ModelTier(StrEnum):
