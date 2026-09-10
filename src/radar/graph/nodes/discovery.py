@@ -129,6 +129,19 @@ TITULO_DE_MANCHETE: tuple[str, ...] = (
     " fecha parceria",
     " quer ",
     " vai ",
+    # Verbos de adoção de tecnologia — a família de manchete mais comum quando o
+    # sujeito é uma empresa grande ("BB adota IA generativa para..."), que é
+    # justamente o caso em que o nome resolvido vira uma companhia real e o
+    # diagnóstico inteiro roda sobre quem não é startup.
+    " adota ",
+    " implementa ",
+    " investe ",
+    " amplia ",
+    " expande ",
+    " reduz ",
+    " transforma ",
+    " apresenta ",
+    " desenvolve ",
     "como ",
     "por que ",
     "o que é",
@@ -149,6 +162,16 @@ def _e_agregador(domain: str) -> bool:
     return any(domain == hint or domain.endswith(f".{hint}") for hint in AGGREGATOR_HINTS)
 
 
+#: Palavras num único segmento de caminho a partir das quais ele é manchete, não
+#: página de produto. Um slug de empresa é curto e nomeia uma coisa
+#: (`/plataforma-clinica`, `/sobre-nos`); um slug de matéria carrega a frase
+#: inteira (`/bb-adota-ia-generativa-para-gestao-financeira`, sete palavras).
+#:
+#: Cinco e não quatro por margem: `/gestao-de-clinicas-medicas` é um produto
+#: legítimo com quatro. O caso que motivou o corte tinha sete.
+MAX_PALAVRAS_NO_SLUG = 5
+
+
 def _caminho_de_conteudo(url: str) -> bool:
     """URL de artigo, vaga ou post — evidência sobre uma empresa, não a empresa."""
     caminho = urlsplit(url).path.lower()
@@ -158,7 +181,12 @@ def _caminho_de_conteudo(url: str) -> bool:
     if len(segmentos) > MAX_PATH_SEGMENTS:
         return True
     # `/2026/09/materia` — data no caminho é assinatura de portal de notícia.
-    return any(re.fullmatch(r"(19|20)\d{2}", s) for s in segmentos)
+    if any(re.fullmatch(r"(19|20)\d{2}", s) for s in segmentos):
+        return True
+    # Slug-frase. Pega o portal de domínio desconhecido que a lista de
+    # agregadores nunca vai cobrir — a forma da URL sobrevive melhor que o
+    # inventário de domínios, que é a mesma razão de todo este filtro existir.
+    return any(len(s.split("-")) >= MAX_PALAVRAS_NO_SLUG for s in segmentos)
 
 
 #: "8 Startups de IA Que...", "10 Ferramentas de..." — listicle sem estar na
